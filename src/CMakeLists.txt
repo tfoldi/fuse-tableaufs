@@ -35,7 +35,7 @@ INCLUDE_DIRECTORIES( ${POSTGRES_INCLUDE_DIR} ${FUSE_INCLUDE_DIRS} )
 set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FUSE_CFLAGS_OTHER}" )
 
 ADD_EXECUTABLE(  tableaufs
-                 tableaufs.c
+                 tableaufs.c workgroup.c workgroup.h
                  )
 
 
