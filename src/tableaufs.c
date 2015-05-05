@@ -39,7 +39,6 @@ static int tableau_getattr(const char *path, struct stat *stbuf)
 
   TFS_WG_parse_path(path, &node);
 
-  
   memset(stbuf, 0, sizeof(struct stat));
   if (strcmp(path, "/") == 0) {
     stbuf->st_mode = S_IFDIR | 0755;
@@ -101,6 +100,7 @@ static struct fuse_operations tableau_oper = {
 
 int main(int argc, char *argv[])
 {
+
   TFS_WG_connect_db( "localhost", "5432", "postgres", "readonly" );
 
   return fuse_main(argc, argv, &tableau_oper, NULL);

@@ -34,7 +34,7 @@
 
 static PGconn *conn;
 
-int TFS_WG_parse_path(char * path, tfs_wg_node_t * node)
+int TFS_WG_parse_path(const char * path, tfs_wg_node_t * node)
 {
   int ret;
 

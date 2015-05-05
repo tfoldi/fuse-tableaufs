@@ -43,6 +43,6 @@ typedef struct tfs_wg_node_t {
 extern int TFS_WG_connect_db(const char * pghost, const char * pgport,
     const char * login, const char * pwd);
 
-extern int TFS_WG_parse_path(char * path, tfs_wg_node_t * node);
+extern int TFS_WG_parse_path(const char * path, tfs_wg_node_t * node);
 
 #endif /* tableaufs_workgroup_h */
