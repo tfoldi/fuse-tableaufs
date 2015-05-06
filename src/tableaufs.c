@@ -33,7 +33,6 @@
 { \
   int __ret = TFS_WG_parse_path(path, node);\
   if (__ret < 0){  \
-    fprintf(stderr, "WHISKEY TANGO FOXTROTT: %d\n", __ret); \
     return __ret; \
   }; \
 } while (0)  
