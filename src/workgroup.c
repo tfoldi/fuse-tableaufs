@@ -43,6 +43,11 @@
   "select c.name" TFS_WG_ATIME_MTIME "from projects c right outer join" \
   " sites p on (p.id = c.site_id) where p.name = $1"
 
+#define TFS_WG_LIST_FILES \
+  "select c.name ||'.twb'" TFS_WG_ATIME_MTIME "from sites ps inner join " \
+  "projects pp on (pp.site_id = ps.id) left outer join workbooks c on " \
+  "(pp.id = c.project_id) where ps.name = $1 and pp.name = $2"               
+
 static PGconn *conn;
 
 int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
@@ -50,17 +55,19 @@ int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
 {
   PGresult *res;
   int i;
-  const char *paramValues[2];
+  const char *paramValues[2] = { node->site, node->project };
 
   if (node->level == TFS_WG_ROOT) 
   {
     res = PQexec(conn, TFS_WG_LIST_SITES);
   } else if (node->level ==  TFS_WG_SITE ) {
-    paramValues[0] = node->site;
-
     res = PQexecParams(conn, TFS_WG_LIST_PROJECTS, 1, NULL, paramValues,
         NULL, NULL, 0);   
+  } else if (node->level == TFS_WG_PROJECT) {
+    res = PQexecParams(conn, TFS_WG_LIST_FILES, 2, NULL, paramValues,
+        NULL, NULL, 0);   
   }
+
 
   if (PQresultStatus(res) != PGRES_TUPLES_OK)
   {
@@ -70,6 +77,13 @@ int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
     return -1;
   }
 
+  // no records = parent not found
+  if (PQntuples(res) == 0 ) {
+    PQclear(res);
+    return -ENOENT;
+  }
+
+  // TODO: 
   for (i = 0; i < PQntuples(res); i++)
     filler(buffer, PQgetvalue(res, i, 0), NULL, 0);
 

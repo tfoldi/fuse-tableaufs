@@ -43,10 +43,10 @@ static int tableau_getattr(const char *path, struct stat *stbuf)
   if ( node.level < TFS_WG_FILE) {
     stbuf->st_mode = S_IFDIR | 0555;
     stbuf->st_nlink = 2;
-  } else if (strcmp(path, tableau_path) == 0) {
+  } else if (node.level == TFS_WG_FILE) {
     stbuf->st_mode = S_IFREG | 0444;
     stbuf->st_nlink = 1;
-    stbuf->st_size = strlen(tableau_str);
+    stbuf->st_size = 0;
   } else
     res = -ENOENT;
   return res;
