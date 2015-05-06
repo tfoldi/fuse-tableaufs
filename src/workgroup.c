@@ -32,7 +32,51 @@
 #define BUFSIZE          1024
 #define _NAME_MAX "255"
 
+#define TFS_WG_ATIME_MTIME \
+  ", extract(epoch from coalesce(c.created_at,'2000-01-01')) ctime" \
+  ", floor(extract(epoch from c.updated_at)) mtime "
+
+#define TFS_WG_LIST_SITES  \
+  "select c.name" TFS_WG_ATIME_MTIME "from sites c"
+
+#define TFS_WG_LIST_PROJECTS \
+  "select c.name" TFS_WG_ATIME_MTIME "from projects c right outer join" \
+  " sites p on (p.id = c.site_id) where p.name = $1"
+
 static PGconn *conn;
+
+int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
+    tfs_wg_add_dir_t filler)
+{
+  PGresult *res;
+  int i;
+  const char *paramValues[2];
+
+  if (node->level == TFS_WG_ROOT) 
+  {
+    res = PQexec(conn, TFS_WG_LIST_SITES);
+  } else if (node->level ==  TFS_WG_SITE ) {
+    paramValues[0] = node->site;
+
+    res = PQexecParams(conn, TFS_WG_LIST_PROJECTS, 1, NULL, paramValues,
+        NULL, NULL, 0);   
+  }
+
+  if (PQresultStatus(res) != PGRES_TUPLES_OK)
+  {
+    fprintf(stderr, "SELECT entries failed: %s", PQerrorMessage(conn));
+    PQclear(res);
+    // TODO: error handling
+    return -1;
+  }
+
+  for (i = 0; i < PQntuples(res); i++)
+    filler(buffer, PQgetvalue(res, i, 0), NULL, 0);
+
+  PQclear(res);
+
+  return 0;
+}
 
 int TFS_WG_parse_path(const char * path, tfs_wg_node_t * node)
 {
@@ -45,12 +89,18 @@ int TFS_WG_parse_path(const char * path, tfs_wg_node_t * node)
   ret = sscanf(path, "/%" _NAME_MAX "[^/]/%" _NAME_MAX "[^/]/%255s",
       node->site, node->project, node->file );
 
+  /* sscanf returned with error */
   if (ret < 0 ) {
     return ret;
+  } else if ( strchr(node->file, '/' ) != NULL  ) {
+    /* file name has / char in it */
+    return -EINVAL;
   } else {
 
     fprintf(stderr, "TFS_WG_parse_path: site: %s proj: %s file: %s\n",
         node->site, node->project, node->file);
+
+    // TODO: check if file/directory exists
 
     node->level = ret;
     return 0;

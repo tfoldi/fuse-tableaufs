@@ -40,8 +40,8 @@ static int tableau_getattr(const char *path, struct stat *stbuf)
   TFS_WG_parse_path(path, &node);
 
   memset(stbuf, 0, sizeof(struct stat));
-  if (strcmp(path, "/") == 0) {
-    stbuf->st_mode = S_IFDIR | 0755;
+  if ( node.level < TFS_WG_FILE) {
+    stbuf->st_mode = S_IFDIR | 0555;
     stbuf->st_nlink = 2;
   } else if (strcmp(path, tableau_path) == 0) {
     stbuf->st_mode = S_IFREG | 0444;
@@ -55,13 +55,18 @@ static int tableau_getattr(const char *path, struct stat *stbuf)
 static int tableau_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     off_t offset, struct fuse_file_info *fi)
 {
-  (void) offset;
-  (void) fi;
-  if (strcmp(path, "/") != 0)
-    return -ENOENT;
+  tfs_wg_node_t node;
+
+  TFS_WG_parse_path(path, &node);
+
+  if ( node.level == TFS_WG_FILE )
+    return -ENOTDIR;
+
   filler(buf, ".", NULL, 0);
   filler(buf, "..", NULL, 0);
-  filler(buf, tableau_path + 1, NULL, 0);
+
+  TFS_WG_readdir(&node, buf, filler);
+
   return 0;
 }
 
