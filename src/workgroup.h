@@ -45,6 +45,11 @@ typedef struct tfs_wg_node_t {
 typedef int(* tfs_wg_add_dir_t )(void *buf, const char *name, 
     const struct stat *stbuf, off_t off);
 
+extern int TFS_WG_read(const tfs_wg_node_t * node, const int fd,
+    char * buf, const size_t size, const off_t offset);
+
+extern int TFS_WG_open(const tfs_wg_node_t * node, int mode);
+
 extern int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
     tfs_wg_add_dir_t filler);
 

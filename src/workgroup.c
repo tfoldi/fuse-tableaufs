@@ -23,6 +23,7 @@
    */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include "workgroup.h"
@@ -48,7 +49,73 @@
   "projects pp on (pp.site_id = ps.id) left outer join workbooks c on " \
   "(pp.id = c.project_id) where ps.name = $1 and pp.name = $2"               
 
+#define TFS_WG_GET_CONTENT_ID \
+  "select content from workbooks inner join repository_data on (repository_"\
+  "data.id = coalesce(repository_data_id,repository_extract_data_id)) inner "\
+  "join projects on (workbooks.project_id = projects.id) inner join sites on "\
+  "(sites.id = projects.site_id) where sites.name = $1 and " \
+  "projects.name = $2 and workbooks.name||'.twb' = $3"
+
+
 static PGconn *conn;
+
+int TFS_WG_read(const tfs_wg_node_t * node, const int loid, 
+    char * buf, const size_t size, const off_t offset)
+{
+  PGresult *res;
+  int fd, ret = 0;
+
+  // currently only read only mode supported
+  res = PQexec(conn, "BEGIN");
+  PQclear(res);
+
+  fd = lo_open(conn, loid, INV_READ);
+
+  fprintf(stderr, "reading file %s from fd %d (%lu:%lu\n",
+      node->file, fd, size, offset);
+
+  if ( lo_lseek(conn, fd, offset, SEEK_SET) < 0 ) {
+    ret = -EINVAL;
+  } else {
+    ret = lo_read(conn, fd, buf, size);
+  }
+  
+  res = PQexec(conn, "END");
+  PQclear(res);
+
+  return ret;
+}
+
+
+int TFS_WG_open(const tfs_wg_node_t * node, int mode)
+{
+  PGresult *res;
+  Oid lobjId;
+  const char *paramValues[3] = { node->site, node->project, node->file };
+
+  res = PQexecParams(conn, TFS_WG_GET_CONTENT_ID, 3, NULL, paramValues,
+      NULL, NULL, 0);
+  
+  if (PQntuples(res) == 0 ) {
+    if (PQresultStatus(res) != PGRES_TUPLES_OK)
+    {
+      fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
+    }
+    PQclear(res);
+    fprintf(stderr, "%s\n", TFS_WG_GET_CONTENT_ID );
+    fprintf(stderr, "ERR: TFS_WG_open: site: '%s' proj: '%s' file: '%s'\n",
+        node->site, node->project, node->file);
+
+    return -ENOENT;
+  }
+
+  lobjId = (Oid)atoi(PQgetvalue(res, 0, 0));
+  fprintf(stderr,"Got loid: %u from workbook %s\n", lobjId, node->file);
+  PQclear(res);
+
+
+  return lobjId;
+}
 
 int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
     tfs_wg_add_dir_t filler)
@@ -98,14 +165,18 @@ int TFS_WG_parse_path(const char * path, tfs_wg_node_t * node)
 
   if ( strlen(path) > PATH_MAX )
     return -EINVAL;
+  else if ( strlen(path) == 1 && path[0] == '/' ) {
+    node->level = TFS_WG_ROOT;
+    return 0;
+  }
 
   memset(node, 0, sizeof(tfs_wg_node_t));
   ret = sscanf(path, "/%" _NAME_MAX "[^/]/%" _NAME_MAX "[^/]/%255s",
       node->site, node->project, node->file );
 
   /* sscanf returned with error */
-  if (ret < 0 ) {
-    return ret;
+  if (ret == EOF ) {
+    return errno;
   } else if ( strchr(node->file, '/' ) != NULL  ) {
     /* file name has / char in it */
     return -EINVAL;

@@ -29,15 +29,21 @@
 #include <fcntl.h>
 #include "workgroup.h"
 
-static const char *tableau_str = "tableau World!\n";
-static const char *tableau_path = "/tableau";
+#define TFS_WG_PARSE_PATH( path, node ) \
+{ \
+  int __ret = TFS_WG_parse_path(path, node);\
+  if (__ret < 0){  \
+    fprintf(stderr, "WHISKEY TANGO FOXTROTT: %d\n", __ret); \
+    return __ret; \
+  }; \
+} while (0)  
 
 static int tableau_getattr(const char *path, struct stat *stbuf)
 {
   int res = 0;
   tfs_wg_node_t node;
 
-  TFS_WG_parse_path(path, &node);
+  TFS_WG_PARSE_PATH(path, &node);
 
   memset(stbuf, 0, sizeof(struct stat));
   if ( node.level < TFS_WG_FILE) {
@@ -57,7 +63,7 @@ static int tableau_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 {
   tfs_wg_node_t node;
 
-  TFS_WG_parse_path(path, &node);
+  TFS_WG_PARSE_PATH(path, &node);
 
   if ( node.level == TFS_WG_FILE )
     return -ENOTDIR;
@@ -71,29 +77,39 @@ static int tableau_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 }
 
 static int tableau_open(const char *path, struct fuse_file_info *fi)
-{
-  if (strcmp(path, tableau_path) != 0)
-    return -ENOENT;
+{  
+  tfs_wg_node_t node;
+
+  TFS_WG_PARSE_PATH(path, &node);
+
   if ((fi->flags & 3) != O_RDONLY)
     return -EACCES;
+
+  fi->fh = (uint64_t) TFS_WG_open(&node, fi->flags & 3);
+  fi->direct_io = 1;
+
   return 0;
 }
 
 static int tableau_read(const char *path, char *buf, size_t size, off_t offset,
     struct fuse_file_info *fi)
 {
-  size_t len;
-  (void) fi;
-  if(strcmp(path, tableau_path) != 0)
-    return -ENOENT;
-  len = strlen(tableau_str);
-  if (offset < len) {
-    if (offset + size > len)
-      size = len - offset;
-    memcpy(buf, tableau_str + offset, size);
-  } else
-    size = 0;
-  return size;
+  tfs_wg_node_t node;
+  int ret;
+
+  TFS_WG_PARSE_PATH(path, &node);
+
+  if(node.level != TFS_WG_FILE )
+    return -EISDIR;
+
+  ret = TFS_WG_read(&node, fi->fh, buf, size, offset);
+
+  return ret;
+}
+
+static int tableau_release(const char *path, struct fuse_file_info *fi)
+{
+  return 0;
 }
 
 static struct fuse_operations tableau_oper = {
@@ -101,6 +117,7 @@ static struct fuse_operations tableau_oper = {
   .readdir        = tableau_readdir,
   .open           = tableau_open,
   .read           = tableau_read,
+  .release        = tableau_release,
 };
 
 int main(int argc, char *argv[])
