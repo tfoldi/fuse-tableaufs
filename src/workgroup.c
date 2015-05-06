@@ -83,9 +83,9 @@ int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
     return -ENOENT;
   }
 
-  // TODO: 
   for (i = 0; i < PQntuples(res); i++)
-    filler(buffer, PQgetvalue(res, i, 0), NULL, 0);
+    if ( PQgetvalue(res, i, 0)[0] != '\0' )
+      filler(buffer, PQgetvalue(res, i, 0), NULL, 0);
 
   PQclear(res);
 
