@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <errno.h>
 #include "workgroup.h"
 #include "libpq-fe.h"
@@ -33,20 +34,23 @@
 #define BUFSIZE          1024
 #define _NAME_MAX "255"
 
-#define TFS_WG_ATIME_MTIME \
-  ", extract(epoch from coalesce(c.created_at,'2000-01-01')) ctime" \
-  ", floor(extract(epoch from c.updated_at)) mtime "
+#define TFS_WG_MTIME \
+  ", extract(epoch from coalesce(c.updated_at,'2000-01-01')) ctime " \
 
 #define TFS_WG_LIST_SITES  \
-  "select c.name" TFS_WG_ATIME_MTIME "from sites c"
+  "select c.name" TFS_WG_MTIME "from sites c"
 
 #define TFS_WG_LIST_PROJECTS \
-  "select c.name" TFS_WG_ATIME_MTIME "from projects c right outer join" \
+  "select c.name" TFS_WG_MTIME "from projects c right outer join" \
   " sites p on (p.id = c.site_id) where p.name = $1"
 
 #define TFS_WG_LIST_FILES \
-  "select c.name ||'.twb'" TFS_WG_ATIME_MTIME "from sites ps inner join " \
+  "select c.name ||'.twbx'" TFS_WG_MTIME "from sites ps inner join " \
   "projects pp on (pp.site_id = ps.id) left outer join workbooks c on " \
+  "(pp.id = c.project_id) where ps.name = $1 and pp.name = $2 "   \
+  "union all " \
+  "select c.name ||'.tdsx'" TFS_WG_MTIME "from sites ps inner join " \
+  "projects pp on (pp.site_id = ps.id) left outer join datasources c on " \
   "(pp.id = c.project_id) where ps.name = $1 and pp.name = $2"               
 
 #define TFS_WG_GET_CONTENT_ID \
@@ -54,13 +58,18 @@
   "data.id = coalesce(repository_data_id,repository_extract_data_id)) inner "\
   "join projects on (workbooks.project_id = projects.id) inner join sites on "\
   "(sites.id = projects.site_id) where sites.name = $1 and " \
-  "projects.name = $2 and workbooks.name||'.twb' = $3"
+  "projects.name = $2 and workbooks.name||'.twbx' = $3 " \
+  "union all " \
+  "select content from datasources inner join repository_data on (repository_"\
+  "data.id = coalesce(repository_data_id,repository_extract_data_id)) inner "\
+  "join projects on (datasources.project_id = projects.id) inner join sites on "\
+  "(sites.id = projects.site_id) where sites.name = $1 and " \
+  "projects.name = $2 and datasources.name||'.tdsx' = $3"
 
 
 static PGconn *conn;
 
-int TFS_WG_read(const tfs_wg_node_t * node, const int loid, 
-    char * buf, const size_t size, const off_t offset)
+int TFS_WG_read(const int loid, char * buf, const size_t size, const off_t offset)
 {
   PGresult *res;
   int fd, ret = 0;
@@ -71,8 +80,8 @@ int TFS_WG_read(const tfs_wg_node_t * node, const int loid,
 
   fd = lo_open(conn, loid, INV_READ);
 
-  fprintf(stderr, "reading file %s from fd %d (%lu:%lu\n",
-      node->file, fd, size, offset);
+  fprintf(stderr, "TFS_WG_open: reading from fd %d (l:%lu:o:%lu)\n",
+      fd, size, offset);
 
   if ( lo_lseek(conn, fd, offset, SEEK_SET) < 0 ) {
     ret = -EINVAL;
@@ -110,7 +119,7 @@ int TFS_WG_open(const tfs_wg_node_t * node, int mode)
   }
 
   lobjId = (Oid)atoi(PQgetvalue(res, 0, 0));
-  fprintf(stderr,"Got loid: %u from workbook %s\n", lobjId, node->file);
+  fprintf(stderr,"TFS_WG_open: Got loid: %u from workbook %s\n", lobjId, node->file);
   PQclear(res);
 
 
@@ -159,6 +168,29 @@ int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
   return 0;
 }
 
+int TFS_WG_stat_file(tfs_wg_node_t * node)
+{
+  char * stat_query = NULL;
+
+  if (node->level == TFS_WG_ROOT) {
+    node->size = 0;
+    time(&(node->mtime));
+    return 0;
+  }
+  
+  stat_query = malloc( 
+      strlen(TFS_WG_LIST_FILES) // longest query 
+      + NAME_MAX // longest parameter 
+      + 100 // max c.name = '<string>'
+      );
+
+
+
+  free(stat_query);
+
+  return 0;
+}
+
 int TFS_WG_parse_path(const char * path, tfs_wg_node_t * node)
 {
   int ret;
@@ -171,12 +203,12 @@ int TFS_WG_parse_path(const char * path, tfs_wg_node_t * node)
   }
 
   memset(node, 0, sizeof(tfs_wg_node_t));
-  ret = sscanf(path, "/%" _NAME_MAX "[^/]/%" _NAME_MAX "[^/]/%255s",
+  ret = sscanf(path, "/%" _NAME_MAX "[^/]/%" _NAME_MAX "[^/]/%255[^/]s",
       node->site, node->project, node->file );
 
   /* sscanf returned with error */
   if (ret == EOF ) {
-    return errno;
+    return errno; // TODO: this so thread unsafe
   } else if ( strchr(node->file, '/' ) != NULL  ) {
     /* file name has / char in it */
     return -EINVAL;
@@ -185,10 +217,12 @@ int TFS_WG_parse_path(const char * path, tfs_wg_node_t * node)
     fprintf(stderr, "TFS_WG_parse_path: site: %s proj: %s file: %s\n",
         node->site, node->project, node->file);
 
-    // TODO: check if file/directory exists
-
     node->level = ret;
-    return 0;
+    
+    // get stat from node
+    ret = TFS_WG_stat_file(node);
+
+    return ret;
   }
 }
 

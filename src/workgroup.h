@@ -36,17 +36,19 @@ typedef enum
 } tfs_wg_level_t;
 
 typedef struct tfs_wg_node_t {
-  tfs_wg_level_t level;
-  char site[NAME_MAX+1];
-  char project[NAME_MAX+1];
-  char file[NAME_MAX+1];
+  tfs_wg_level_t level;  // level inside the mount point
+  char site[NAME_MAX+1]; // site name
+  char project[NAME_MAX+1]; // project name
+  char file[NAME_MAX+1]; // Workbook/Datasource name
+  time_t mtime; // modification time
+  size_t size;  // file size
 } tfs_wg_node_t;
 
 typedef int(* tfs_wg_add_dir_t )(void *buf, const char *name, 
     const struct stat *stbuf, off_t off);
 
-extern int TFS_WG_read(const tfs_wg_node_t * node, const int fd,
-    char * buf, const size_t size, const off_t offset);
+extern int TFS_WG_read(const int fd, char * buf, const size_t size, 
+    const off_t offset);
 
 extern int TFS_WG_open(const tfs_wg_node_t * node, int mode);
 
