@@ -70,18 +70,15 @@ static int tableau_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 static int tableau_open(const char *path, struct fuse_file_info *fi)
 {  
   tfs_wg_node_t node;
+  int ret;
 
   TFS_WG_PARSE_PATH(path, &node);
 
-  if ((fi->flags & 3) != O_RDONLY)
-    return -EACCES;
-
-  fi->fh = (uint64_t) TFS_WG_open(&node, fi->flags & 3);
+  ret = TFS_WG_open(&node, fi->flags, &(fi->fh) );
   fi->direct_io = 1; // during read we can return smaller buffer than
                      // requested
 
-  // if we have a file handle we're good to go
-  return (fi->fh >= 0 ? 0 : (int)fi->fh);
+  return ret;
 }
 
 static int tableau_read(const char *path, char *buf, size_t size, off_t offset,

@@ -97,11 +97,13 @@ int TFS_WG_read(const int loid, char * buf, const size_t size, const off_t offse
 }
 
 
-int TFS_WG_open(const tfs_wg_node_t * node, int mode)
+int TFS_WG_open(const tfs_wg_node_t * node, int mode, uint64_t * fh)
 {
   PGresult *res;
-  Oid lobjId;
   const char *paramValues[3] = { node->site, node->project, node->file };
+
+  if ((mode & 3) != O_RDONLY)
+    return -EACCES;
 
   // get large object identifier from 
   res = PQexecParams(conn, TFS_WG_GET_CONTENT_ID, 3, NULL, paramValues,
@@ -125,12 +127,12 @@ int TFS_WG_open(const tfs_wg_node_t * node, int mode)
     }
   }
 
-  lobjId = (Oid)atoi(PQgetvalue(res, 0, 0));
-  fprintf(stderr,"TFS_WG_open: Got loid: %u from workbook %s\n", lobjId, node->file);
+  *fh = (Oid)atoll(PQgetvalue(res, 0, 0));
+  fprintf(stderr,"TFS_WG_open: Got loid: %u from workbook %s\n", *fh, node->file);
   PQclear(res);
 
 
-  return (int)lobjId; // TODO: we lose a bit here, loid should go to parameters
+  return 0;
 }
 
 int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
@@ -224,6 +226,7 @@ int TFS_WG_stat_file(tfs_wg_node_t * node)
     ret =  -ENOENT;
   } else if ( PQgetvalue(res, 0, 0)[0] == '\0' ) {
     // null for name, no child
+    ret = -ENOENT;
   } else {
     ;
   }
@@ -240,7 +243,7 @@ int TFS_WG_parse_path(const char * path, tfs_wg_node_t * node)
     return -EINVAL;
   else if ( strlen(path) == 1 && path[0] == '/' ) {
     node->level = TFS_WG_ROOT;
-    return 0;
+    return TFS_WG_stat_file(node);
   }
 
   memset(node, 0, sizeof(tfs_wg_node_t));
