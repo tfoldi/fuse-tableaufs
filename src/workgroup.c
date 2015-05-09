@@ -44,11 +44,12 @@
   "select c.name" TFS_WG_MTIME "from projects c right outer join" \
   " sites p on (p.id = c.site_id) where p.name = $1"
 
-#define TFS_WG_LIST_FILES \
+#define TFS_WG_LIST_WORKBOOKS \
   "select c.name ||'.twbx'" TFS_WG_MTIME "from sites ps inner join " \
   "projects pp on (pp.site_id = ps.id) left outer join workbooks c on " \
   "(pp.id = c.project_id) where ps.name = $1 and pp.name = $2 "   \
-  "union all " \
+
+#define TFS_WG_LIST_DATASOURCES \
   "select c.name ||'.tdsx'" TFS_WG_MTIME "from sites ps inner join " \
   "projects pp on (pp.site_id = ps.id) left outer join datasources c on " \
   "(pp.id = c.project_id) where ps.name = $1 and pp.name = $2"               
@@ -78,12 +79,12 @@ int TFS_WG_read(const int loid, char * buf, const size_t size, const off_t offse
   res = PQexec(conn, "BEGIN");
   PQclear(res);
 
-  fd = lo_open(conn, loid, INV_READ);
+  fd = lo_open(conn, (unsigned int)loid, INV_READ);
 
   fprintf(stderr, "TFS_WG_open: reading from fd %d (l:%lu:o:%lu)\n",
       fd, size, offset);
 
-  if ( lo_lseek(conn, fd, offset, SEEK_SET) < 0 ) {
+  if ( lo_lseek(conn, fd, (int)offset, SEEK_SET) < 0 ) {
     ret = -EINVAL;
   } else {
     ret = lo_read(conn, fd, buf, size);
@@ -102,20 +103,26 @@ int TFS_WG_open(const tfs_wg_node_t * node, int mode)
   Oid lobjId;
   const char *paramValues[3] = { node->site, node->project, node->file };
 
+  // get large object identifier from 
   res = PQexecParams(conn, TFS_WG_GET_CONTENT_ID, 3, NULL, paramValues,
-      NULL, NULL, 0);
-  
+      NULL, NULL, 0); 
+
   if (PQntuples(res) == 0 ) {
     if (PQresultStatus(res) != PGRES_TUPLES_OK)
     {
+      // query failed
       fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
-    }
-    PQclear(res);
-    fprintf(stderr, "%s\n", TFS_WG_GET_CONTENT_ID );
-    fprintf(stderr, "ERR: TFS_WG_open: site: '%s' proj: '%s' file: '%s'\n",
-        node->site, node->project, node->file);
+      PQclear(res);
+    } else {
+      // no rows: no such file or directory
+      // we should rarely reach this part
+      // as parse path already checked this node
+      PQclear(res);
+      fprintf(stderr, "TFS_WG_open: ENOENT site: '%s' proj: '%s' file: '%s'\n",
+          node->site, node->project, node->file);
 
-    return -ENOENT;
+      return -ENOENT;
+    }
   }
 
   lobjId = (Oid)atoi(PQgetvalue(res, 0, 0));
@@ -123,7 +130,7 @@ int TFS_WG_open(const tfs_wg_node_t * node, int mode)
   PQclear(res);
 
 
-  return lobjId;
+  return (int)lobjId; // TODO: we lose a bit here, loid should go to parameters
 }
 
 int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
@@ -140,8 +147,9 @@ int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
     res = PQexecParams(conn, TFS_WG_LIST_PROJECTS, 1, NULL, paramValues,
         NULL, NULL, 0);   
   } else if (node->level == TFS_WG_PROJECT) {
-    res = PQexecParams(conn, TFS_WG_LIST_FILES, 2, NULL, paramValues,
-        NULL, NULL, 0);   
+    res = PQexecParams(conn, 
+        TFS_WG_LIST_WORKBOOKS " union all " TFS_WG_LIST_DATASOURCES, 
+        2, NULL, paramValues, NULL, NULL, 0);   
   }
 
 
@@ -170,25 +178,58 @@ int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
 
 int TFS_WG_stat_file(tfs_wg_node_t * node)
 {
-  char * stat_query = NULL;
+  char stat_query[4096];
+  const char *paramValues[3] = { node->site, node->project, node->file };
+  PGresult * res;
+  int ret;
+
+  // basic stat stuff: file type, nlinks, size of dirs
+  if ( node->level < TFS_WG_FILE) {
+    node->st.st_mode = S_IFDIR | 0555;   // read only
+    node->st.st_nlink = 2;
+    node->st.st_size = 0;
+  } else if (node->level == TFS_WG_FILE) {
+    node->st.st_mode = S_IFREG | 0444;   // read only
+    node->st.st_nlink = 1;
+  }
 
   if (node->level == TFS_WG_ROOT) {
-    node->size = 0;
-    time(&(node->mtime));
+    time(&(node->st.st_mtime));
     return 0;
-  }
+  } else if (node->level == TFS_WG_SITE) {
+    
+    res = PQexecParams(conn, TFS_WG_LIST_SITES " and c.name = $1", 1, NULL, 
+        paramValues, NULL, NULL, 0);
+
+  } else if (node->level ==  TFS_WG_PROJECT) {
+
+    res = PQexecParams(conn, TFS_WG_LIST_PROJECTS " and c.name = $2",
+        2, NULL, paramValues, NULL, NULL, 0);   
   
-  stat_query = malloc( 
-      strlen(TFS_WG_LIST_FILES) // longest query 
-      + NAME_MAX // longest parameter 
-      + 100 // max c.name = '<string>'
-      );
+  } else if (node->level == TFS_WG_FILE) {
+  
+    res = PQexecParams(conn, 
+        TFS_WG_LIST_WORKBOOKS " and c.name = $3 union all " 
+        TFS_WG_LIST_DATASOURCES " and c.name = $3", 
+        3, NULL, paramValues, NULL, NULL, 0);   
+  }
 
+  if (PQresultStatus(res) != PGRES_TUPLES_OK)
+  {
+    fprintf(stderr, "SELECT entries failed: %s", PQerrorMessage(conn));
+    // TODO: error handling
+    ret = -EINVAL;
+  } else if (PQntuples(res) == 0 ) {
+    // no records = parent not found
+    ret =  -ENOENT;
+  } else if ( PQgetvalue(res, 0, 0)[0] == '\0' ) {
+    // null for name, no child
+  } else {
+    ;
+  }
 
-
-  free(stat_query);
-
-  return 0;
+  PQclear(res);
+  return ret;
 }
 
 int TFS_WG_parse_path(const char * path, tfs_wg_node_t * node)

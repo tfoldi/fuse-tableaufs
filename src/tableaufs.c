@@ -44,16 +44,8 @@ static int tableau_getattr(const char *path, struct stat *stbuf)
 
   TFS_WG_PARSE_PATH(path, &node);
 
-  memset(stbuf, 0, sizeof(struct stat));
-  if ( node.level < TFS_WG_FILE) {
-    stbuf->st_mode = S_IFDIR | 0555;
-    stbuf->st_nlink = 2;
-  } else if (node.level == TFS_WG_FILE) {
-    stbuf->st_mode = S_IFREG | 0444;
-    stbuf->st_nlink = 1;
-    stbuf->st_size = 0;
-  } else
-    res = -ENOENT;
+  memcpy(stbuf, &(node.st), sizeof(struct stat));
+  
   return res;
 }
 
