@@ -23,9 +23,9 @@
 
 #ifndef tableaufs_workgroup_h
 #define tableaufs_workgroup_h
+#include <stdint.h>
 #include <limits.h>
 #include <fcntl.h>
-
 
 typedef enum
 {
@@ -46,7 +46,7 @@ typedef struct tfs_wg_node_t {
 typedef int(* tfs_wg_add_dir_t )(void *buf, const char *name, 
     const struct stat *stbuf, off_t off);
 
-extern int TFS_WG_read(const int fd, char * buf, const size_t size, 
+extern int TFS_WG_read(const uint64_t fd, char * buf, const size_t size, 
     const off_t offset);
 
 extern int TFS_WG_open(const tfs_wg_node_t * node, int mode, uint64_t * fh);

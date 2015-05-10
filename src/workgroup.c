@@ -24,6 +24,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <time.h>
 #include <errno.h>
@@ -35,22 +36,26 @@
 #define _NAME_MAX "255"
 
 #define TFS_WG_MTIME \
-  ", extract(epoch from coalesce(c.updated_at,'2000-01-01')) ctime " \
+  ", extract(epoch from coalesce(c.updated_at,'2000-01-01')) ctime " 
+
+#define TFS_WG_MTIME_SIZE \
+  TFS_WG_MTIME            \
+  ", size  " 
 
 #define TFS_WG_LIST_SITES  \
-  "select c.name" TFS_WG_MTIME "from sites c"
+  "select c.name" TFS_WG_MTIME "from sites c where 1 = 1 "
 
 #define TFS_WG_LIST_PROJECTS \
   "select c.name" TFS_WG_MTIME "from projects c right outer join" \
   " sites p on (p.id = c.site_id) where p.name = $1"
 
 #define TFS_WG_LIST_WORKBOOKS \
-  "select c.name ||'.twbx'" TFS_WG_MTIME "from sites ps inner join " \
+  "select c.name ||'.twbx'" TFS_WG_MTIME_SIZE "from sites ps inner join " \
   "projects pp on (pp.site_id = ps.id) left outer join workbooks c on " \
   "(pp.id = c.project_id) where ps.name = $1 and pp.name = $2 "   \
 
 #define TFS_WG_LIST_DATASOURCES \
-  "select c.name ||'.tdsx'" TFS_WG_MTIME "from sites ps inner join " \
+  "select c.name ||'.tdsx'" TFS_WG_MTIME_SIZE "from sites ps inner join " \
   "projects pp on (pp.site_id = ps.id) left outer join datasources c on " \
   "(pp.id = c.project_id) where ps.name = $1 and pp.name = $2"               
 
@@ -70,16 +75,17 @@
 
 static PGconn *conn;
 
-int TFS_WG_read(const int loid, char * buf, const size_t size, const off_t offset)
+int TFS_WG_read(const uint64_t loid, char * buf, const size_t size, const off_t offset)
 {
   PGresult *res;
   int fd, ret = 0;
 
-  // currently only read only mode supported
+  // LO operations only supported within transactions
+  // On our FS one read is one transaction
   res = PQexec(conn, "BEGIN");
   PQclear(res);
 
-  fd = lo_open(conn, (unsigned int)loid, INV_READ);
+  fd = lo_open(conn, (Oid)loid, INV_READ);
 
   fprintf(stderr, "TFS_WG_open: reading from fd %d (l:%lu:o:%lu)\n",
       fd, size, offset);
@@ -128,7 +134,7 @@ int TFS_WG_open(const tfs_wg_node_t * node, int mode, uint64_t * fh)
   }
 
   *fh = (Oid)atoll(PQgetvalue(res, 0, 0));
-  fprintf(stderr,"TFS_WG_open: Got loid: %u from workbook %s\n", *fh, node->file);
+  fprintf(stderr,"TFS_WG_open: Got loid: %li from workbook %s\n", *fh, node->file);
   PQclear(res);
 
 
@@ -180,7 +186,6 @@ int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
 
 int TFS_WG_stat_file(tfs_wg_node_t * node)
 {
-  char stat_query[4096];
   const char *paramValues[3] = { node->site, node->project, node->file };
   PGresult * res;
   int ret;
@@ -211,8 +216,8 @@ int TFS_WG_stat_file(tfs_wg_node_t * node)
   } else if (node->level == TFS_WG_FILE) {
   
     res = PQexecParams(conn, 
-        TFS_WG_LIST_WORKBOOKS " and c.name = $3 union all " 
-        TFS_WG_LIST_DATASOURCES " and c.name = $3", 
+        TFS_WG_LIST_WORKBOOKS " and c.name||'.twbx' = $3 union all " 
+        TFS_WG_LIST_DATASOURCES " and c.name||'.tdsx' = $3", 
         3, NULL, paramValues, NULL, NULL, 0);   
   }
 
@@ -228,7 +233,12 @@ int TFS_WG_stat_file(tfs_wg_node_t * node)
     // null for name, no child
     ret = -ENOENT;
   } else {
-    ;
+    node->st.st_mtime = atoll( PQgetvalue(res, 0, 1) );
+
+    if ( node->level == TFS_WG_FILE )
+      node->st.st_size = atoll( PQgetvalue(res, 0, 2) );
+   
+    ret = 0;
   }
 
   PQclear(res);
