@@ -38,25 +38,21 @@
 #define TFS_WG_MTIME \
   ", extract(epoch from coalesce(c.updated_at,'2000-01-01')) ctime " 
 
-#define TFS_WG_MTIME_SIZE \
-  TFS_WG_MTIME            \
-  ", size  " 
-
 #define TFS_WG_LIST_SITES  \
   "select c.name" TFS_WG_MTIME "from sites c where 1 = 1 "
 
 #define TFS_WG_LIST_PROJECTS \
-  "select c.name" TFS_WG_MTIME "from projects c right outer join" \
+  "select c.name" TFS_WG_MTIME "from projects c inner join" \
   " sites p on (p.id = c.site_id) where p.name = $1"
 
 #define TFS_WG_LIST_WORKBOOKS \
-  "select c.name ||'.twbx'" TFS_WG_MTIME_SIZE "from sites ps inner join " \
-  "projects pp on (pp.site_id = ps.id) left outer join workbooks c on " \
+  "select c.name ||'.twbx'" TFS_WG_MTIME "from sites ps inner join " \
+  "projects pp on (pp.site_id = ps.id) inner join workbooks c on " \
   "(pp.id = c.project_id) where ps.name = $1 and pp.name = $2 "   \
 
 #define TFS_WG_LIST_DATASOURCES \
-  "select c.name ||'.tdsx'" TFS_WG_MTIME_SIZE "from sites ps inner join " \
-  "projects pp on (pp.site_id = ps.id) left outer join datasources c on " \
+  "select c.name ||'.tdsx'" TFS_WG_MTIME "from sites ps inner join " \
+  "projects pp on (pp.site_id = ps.id) inner join datasources c on " \
   "(pp.id = c.project_id) where ps.name = $1 and pp.name = $2"               
 
 #define TFS_WG_GET_CONTENT_ID \
@@ -145,7 +141,7 @@ int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
     tfs_wg_add_dir_t filler)
 {
   PGresult *res;
-  int i;
+  int i, ret;
   const char *paramValues[2] = { node->site, node->project };
 
   if (node->level == TFS_WG_ROOT) 
@@ -164,24 +160,18 @@ int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
   if (PQresultStatus(res) != PGRES_TUPLES_OK)
   {
     fprintf(stderr, "SELECT entries failed: %s", PQerrorMessage(conn));
-    PQclear(res);
     // TODO: error handling
-    return -1;
-  }
-
-  // no records = parent not found
-  if (PQntuples(res) == 0 ) {
-    PQclear(res);
-    return -ENOENT;
-  }
-
-  for (i = 0; i < PQntuples(res); i++)
-    if ( PQgetvalue(res, i, 0)[0] != '\0' )
+    ret = -EIO;
+  } else if (PQntuples(res) == 0 ) {
+    ret = -ENOENT;
+  } else {
+    for (i = 0; i < PQntuples(res); i++)
       filler(buffer, PQgetvalue(res, i, 0), NULL, 0);
+  }
 
   PQclear(res);
 
-  return 0;
+  return ret;
 }
 
 int TFS_WG_stat_file(tfs_wg_node_t * node)
@@ -227,16 +217,12 @@ int TFS_WG_stat_file(tfs_wg_node_t * node)
     // TODO: error handling
     ret = -EINVAL;
   } else if (PQntuples(res) == 0 ) {
-    // no records = parent not found
     ret =  -ENOENT;
-  } else if ( PQgetvalue(res, 0, 0)[0] == '\0' ) {
-    // null for name, no child
-    ret = -ENOENT;
   } else {
     node->st.st_mtime = atoll( PQgetvalue(res, 0, 1) );
 
-    if ( node->level == TFS_WG_FILE )
-      node->st.st_size = atoll( PQgetvalue(res, 0, 2) );
+ //   if ( node->level == TFS_WG_FILE )
+ //     node->st.st_size = atoll( PQgetvalue(res, 0, 2) );
    
     ret = 0;
   }
