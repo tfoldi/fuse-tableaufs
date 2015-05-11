@@ -46,8 +46,7 @@ TableauFS maps Tableau repository to the following directory structure:
     /Sitename/Projectname/Datasource 1.tds[x] 
 
 Read operations are fully supported while write support is implemented but still highly experimental.
-
-Last modification time, file size and other file system stat 
+Last modification time is read from last\_updated columns while file sizes are actual sizes of the pg\_largeobjects.
 
 ## Questions 
 
