@@ -38,5 +38,6 @@ ADD_EXECUTABLE(  tableaufs
                  tableaufs.c workgroup.c workgroup.h
                  )
 
+INSTALL( TARGETS tableaufs RUNTIME DESTINATION bin )
 
 # -- EOF 
