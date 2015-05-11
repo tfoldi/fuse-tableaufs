@@ -45,28 +45,20 @@
   "select c.name" TFS_WG_MTIME "from projects c inner join" \
   " sites p on (p.id = c.site_id) where p.name = $1"
 
-#define TFS_WG_LIST_WORKBOOKS \
-  "select c.name ||'.twbx'" TFS_WG_MTIME "from sites ps inner join " \
-  "projects pp on (pp.site_id = ps.id) inner join workbooks c on " \
-  "(pp.id = c.project_id) where ps.name = $1 and pp.name = $2 "   \
+#define TFS_WG_LIST_FILE( entity, ext ) \
+  "select c.name || '." #ext "' || case when substring(data from 1 for 2) = " \
+  "'PK' then 'x' else '' end filename " TFS_WG_MTIME ", content," \
+  "(select sum(length(data)) from pg_largeobject where pg_largeobject.loid = " \
+  "repository_data.content) size from " #entity " c inner join repository_data " \
+  " on (repository_data.id = coalesce(repository_data_id,repository_extract_data_id))" \
+  "inner join projects on (c.project_id = projects.id) inner join sites on " \
+  "(sites.id = projects.site_id) inner join pg_largeobject on " \
+  "(repository_data.content = pg_largeobject.loid) where pg_largeobject.pageno = 0" \
+  " and sites.name = $1 and projects.name = $2 "
 
-#define TFS_WG_LIST_DATASOURCES \
-  "select c.name ||'.tdsx'" TFS_WG_MTIME "from sites ps inner join " \
-  "projects pp on (pp.site_id = ps.id) inner join datasources c on " \
-  "(pp.id = c.project_id) where ps.name = $1 and pp.name = $2"               
+#define TFS_WG_LIST_WORKBOOKS TFS_WG_LIST_FILE( workbooks, twb )
 
-#define TFS_WG_GET_CONTENT_ID \
-  "select content from workbooks inner join repository_data on (repository_"\
-  "data.id = coalesce(repository_data_id,repository_extract_data_id)) inner "\
-  "join projects on (workbooks.project_id = projects.id) inner join sites on "\
-  "(sites.id = projects.site_id) where sites.name = $1 and " \
-  "projects.name = $2 and workbooks.name||'.twbx' = $3 " \
-  "union all " \
-  "select content from datasources inner join repository_data on (repository_"\
-  "data.id = coalesce(repository_data_id,repository_extract_data_id)) inner "\
-  "join projects on (datasources.project_id = projects.id) inner join sites on "\
-  "(sites.id = projects.site_id) where sites.name = $1 and " \
-  "projects.name = $2 and datasources.name||'.tdsx' = $3"
+#define TFS_WG_LIST_DATASOURCES TFS_WG_LIST_FILE( datasources, tds )
 
 
 static PGconn *conn;
@@ -101,38 +93,13 @@ int TFS_WG_read(const uint64_t loid, char * buf, const size_t size, const off_t 
 
 int TFS_WG_open(const tfs_wg_node_t * node, int mode, uint64_t * fh)
 {
-  PGresult *res;
-  const char *paramValues[3] = { node->site, node->project, node->file };
 
   if ((mode & 3) != O_RDONLY)
     return -EACCES;
-
-  // get large object identifier from 
-  res = PQexecParams(conn, TFS_WG_GET_CONTENT_ID, 3, NULL, paramValues,
-      NULL, NULL, 0); 
-
-  if (PQntuples(res) == 0 ) {
-    if (PQresultStatus(res) != PGRES_TUPLES_OK)
-    {
-      // query failed
-      fprintf(stderr, "SELECT failed: %s", PQerrorMessage(conn));
-      PQclear(res);
-    } else {
-      // no rows: no such file or directory
-      // we should rarely reach this part
-      // as parse path already checked this node
-      PQclear(res);
-      fprintf(stderr, "TFS_WG_open: ENOENT site: '%s' proj: '%s' file: '%s'\n",
-          node->site, node->project, node->file);
-
-      return -ENOENT;
-    }
-  }
-
-  *fh = (Oid)atoll(PQgetvalue(res, 0, 0));
-  fprintf(stderr,"TFS_WG_open: Got loid: %li from workbook %s\n", *fh, node->file);
-  PQclear(res);
-
+  else if (node->level != TFS_WG_FILE )
+    return -EISDIR;
+  else 
+    *fh = node->loid;
 
   return 0;
 }
@@ -166,7 +133,7 @@ int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
     ret = -ENOENT;
   } else {
     for (i = 0; i < PQntuples(res); i++)
-      filler(buffer, PQgetvalue(res, i, 0), NULL, 0);
+      filler(buffer, PQgetvalue(res, i, TFS_WG_QUERY_NAME), NULL, 0);
   }
 
   PQclear(res);
@@ -206,8 +173,9 @@ int TFS_WG_stat_file(tfs_wg_node_t * node)
   } else if (node->level == TFS_WG_FILE) {
   
     res = PQexecParams(conn, 
-        TFS_WG_LIST_WORKBOOKS " and c.name||'.twbx' = $3 union all " 
-        TFS_WG_LIST_DATASOURCES " and c.name||'.tdsx' = $3", 
+        TFS_WG_LIST_WORKBOOKS " and $3 IN ( c.name||'.twbx', c.name||'.twb') "
+        "union all " 
+        TFS_WG_LIST_DATASOURCES " and $3 IN ( c.name||'.tdsx', c.name||'.tds') ", 
         3, NULL, paramValues, NULL, NULL, 0);   
   }
 
@@ -219,11 +187,13 @@ int TFS_WG_stat_file(tfs_wg_node_t * node)
   } else if (PQntuples(res) == 0 ) {
     ret =  -ENOENT;
   } else {
-    node->st.st_mtime = atoll( PQgetvalue(res, 0, 1) );
+    node->st.st_mtime = atoll( PQgetvalue(res, 0, TFS_WG_QUERY_MTIME) );
 
- //   if ( node->level == TFS_WG_FILE )
- //     node->st.st_size = atoll( PQgetvalue(res, 0, 2) );
-   
+    if ( node->level == TFS_WG_FILE ) {
+      node->st.st_size = atoll( PQgetvalue(res, 0, TFS_WG_QUERY_SIZE) );
+      node->loid = (uint64_t)atoll( PQgetvalue(res, 0, TFS_WG_QUERY_CONTENT) );
+    }
+
     ret = 0;
   }
 

@@ -40,8 +40,16 @@ typedef struct tfs_wg_node_t {
   char site[NAME_MAX+1]; // site name
   char project[NAME_MAX+1]; // project name
   char file[NAME_MAX+1]; // Workbook/Datasource name
+  uint64_t loid;  // repo id, if file
   struct stat st; // file stat info
 } tfs_wg_node_t;
+
+typedef enum {
+  TFS_WG_QUERY_NAME = 0,
+  TFS_WG_QUERY_MTIME = 1,
+  TFS_WG_QUERY_CONTENT = 2,
+  TFS_WG_QUERY_SIZE = 3
+} tfs_wg_list_query_cols_t;
 
 typedef int(* tfs_wg_add_dir_t )(void *buf, const char *name, 
     const struct stat *stbuf, off_t off);
