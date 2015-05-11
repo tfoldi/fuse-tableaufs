@@ -63,17 +63,24 @@
 
 static PGconn *conn;
 
-int TFS_WG_read(const uint64_t loid, char * buf, const size_t size, const off_t offset)
+int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid, char * buf, 
+    const size_t size, const off_t offset)
 {
   PGresult *res;
   int fd, ret = 0;
+  int mode;
+
+  if ( op == TFS_WG_READ )
+    mode = INV_READ;
+  else
+    mode = INV_WRITE;
 
   // LO operations only supported within transactions
   // On our FS one read is one transaction
   res = PQexec(conn, "BEGIN");
   PQclear(res);
 
-  fd = lo_open(conn, (Oid)loid, INV_READ);
+  fd = lo_open(conn, (Oid)loid, mode);
 
   fprintf(stderr, "TFS_WG_open: reading from fd %d (l:%lu:o:%lu)\n",
       fd, size, offset);
@@ -85,7 +92,24 @@ int TFS_WG_read(const uint64_t loid, char * buf, const size_t size, const off_t 
 #endif // HAVE_LO_LSEEK64
     ret = -EINVAL;
   } else {
-    ret = lo_read(conn, fd, buf, size);
+    switch (op) {
+      case TFS_WG_READ:
+        ret = lo_read(conn, fd, buf, size);
+        break;
+      case TFS_WG_WRITE:
+        ret = lo_write(conn, fd, buf, size);
+        break;
+      case TFS_WG_TRUNCATE:
+#ifdef HAVE_LO_TRUNCATE64
+        ret = lo_truncate64(conn, fd, offset);
+#else
+        ret = lo_truncate(conn, fd,(size_t) offset);
+#endif
+        break;
+      default:
+        ret = -EINVAL;
+        break;
+    }
   }
   
   res = PQexec(conn, "END");
@@ -98,9 +122,7 @@ int TFS_WG_read(const uint64_t loid, char * buf, const size_t size, const off_t 
 int TFS_WG_open(const tfs_wg_node_t * node, int mode, uint64_t * fh)
 {
 
-  if ((mode & 3) != O_RDONLY)
-    return -EACCES;
-  else if (node->level != TFS_WG_FILE )
+  if (node->level != TFS_WG_FILE )
     return -EISDIR;
   else 
     *fh = node->loid;

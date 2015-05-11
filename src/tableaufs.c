@@ -85,10 +85,27 @@ static int tableau_open(const char *path, struct fuse_file_info *fi)
 static int tableau_read(const char *path, char *buf, size_t size, off_t offset,
     struct fuse_file_info *fi)
 {
-  if(fi->fh < 0)
-    return -EBADF;
+  return TFS_WG_IO_operation(TFS_WG_READ, fi->fh, buf, size, offset);
+}
 
-  return TFS_WG_read(fi->fh, buf, size, offset);
+static int tableau_write(const char *path, const char *buf, size_t size, off_t offset,
+    struct fuse_file_info *fi)
+{
+  return TFS_WG_IO_operation(TFS_WG_WRITE, fi->fh, (char *) buf, size, offset);
+}
+
+static int tableau_truncate(const char *path, off_t offset)
+{
+  tfs_wg_node_t node;
+  int ret;
+
+  TFS_WG_PARSE_PATH(path, &node);
+  if (node.level != TFS_WG_FILE )
+    ret = -EISDIR;
+  else
+    ret = TFS_WG_IO_operation(TFS_WG_TRUNCATE, node.loid, NULL, 0, offset);
+
+  return ret;
 }
 
 static struct fuse_operations tableau_oper = {
@@ -96,6 +113,8 @@ static struct fuse_operations tableau_oper = {
   .readdir        = tableau_readdir,
   .open           = tableau_open,
   .read           = tableau_read,
+  .write          = tableau_write,
+  .truncate       = tableau_truncate,
 };
 
 struct tableau_cmdargs { 
