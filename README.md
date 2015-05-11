@@ -45,7 +45,7 @@ TableauFS maps Tableau repository to the following directory structure:
     /Sitename/Projectname/Workbook 2.tbw[x] 
     /Sitename/Projectname/Datasource 1.tds[x] 
 
-At the moment only read operations are supported but adding write support is a question about ten lines of code.
+Read operations are fully supported while write support is implemented but still highly experimental.
 
 Last modification time, file size and other file system stat 
 
