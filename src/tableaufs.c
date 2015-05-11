@@ -24,6 +24,7 @@
 #define FUSE_USE_VERSION 30
 #include <fuse.h>
 #include <stdio.h>
+#include <stddef.h>
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -90,23 +91,51 @@ static int tableau_read(const char *path, char *buf, size_t size, off_t offset,
   return TFS_WG_read(fi->fh, buf, size, offset);
 }
 
-static int tableau_release(const char *path, struct fuse_file_info *fi)
-{
-  return 0;
-}
-
 static struct fuse_operations tableau_oper = {
   .getattr        = tableau_getattr,
   .readdir        = tableau_readdir,
   .open           = tableau_open,
   .read           = tableau_read,
-  .release        = tableau_release,
+};
+
+struct tableau_cmdargs { 
+  char *pghost; 
+  char *pgport; 
+  char *pguser; 
+  char *pgpass; 
+};
+
+static struct tableau_cmdargs tableau_cmdargs;
+static struct fuse_opt tableaufs_opts[] =
+{
+    { "pghost=%s", offsetof(struct tableau_cmdargs, pghost), 0 },
+    { "pgport=%s", offsetof(struct tableau_cmdargs, pgport), 0 },
+    { "pguser=%s", offsetof(struct tableau_cmdargs, pguser), 0 },
+    { "pgpass=%s", offsetof(struct tableau_cmdargs, pgpass), 0 }
 };
 
 int main(int argc, char *argv[])
 {
+  struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
-  TFS_WG_connect_db( "localhost", "5432", "postgres", "readonly" );
+  if (fuse_opt_parse(&args, &tableau_cmdargs, tableaufs_opts, 0) == -1)
+    return -1;
 
-  return fuse_main(argc, argv, &tableau_oper, NULL);
+
+  if (tableau_cmdargs.pguser == NULL ||
+      tableau_cmdargs.pghost == NULL ||
+      tableau_cmdargs.pgport == NULL ||
+      tableau_cmdargs.pgpass == NULL) {
+    fprintf(stderr, "Error: You should specify all of the following mount options:\n");
+    fprintf(stderr, "\tpghost pgport pguser pgpass\n");
+    return -1;
+  }
+
+  printf("Connecting to %s@%s:%s\n", tableau_cmdargs.pguser, 
+      tableau_cmdargs.pghost, tableau_cmdargs.pgport );
+
+  TFS_WG_connect_db( tableau_cmdargs.pghost, tableau_cmdargs.pgport,
+      tableau_cmdargs.pguser, tableau_cmdargs.pgpass);
+
+  return fuse_main(args.argc, args.argv, &tableau_oper, NULL);
 }

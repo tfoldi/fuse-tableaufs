@@ -78,7 +78,11 @@ int TFS_WG_read(const uint64_t loid, char * buf, const size_t size, const off_t 
   fprintf(stderr, "TFS_WG_open: reading from fd %d (l:%lu:o:%lu)\n",
       fd, size, offset);
 
+#ifdef HAVE_LO_LSEEK64
+  if ( lo_lseek64(conn, fd, offset, SEEK_SET) < 0 ) {
+#else
   if ( lo_lseek(conn, fd, (int)offset, SEEK_SET) < 0 ) {
+#endif // HAVE_LO_LSEEK64
     ret = -EINVAL;
   } else {
     ret = lo_read(conn, fd, buf, size);
