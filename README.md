@@ -1,5 +1,5 @@
 # FUSE-TableauFS: File System on Tableau Repository
-TableauFS is a FUSE based userspace file system driver built on top of Tableau's repository server. It allows to mount tableau servers with its datasources and workbooks directly to the file system. File information and contents are retrieved on-access without any local persistence or caching.  The file system connects directly to the postgresql database using `readonly` credentials. 
+TableauFS is a FUSE based userspace file system driver built on top of Tableau's repository server. It allows to mount tableau servers with its datasources and workbooks directly to the file system. File information and contents are retrieved on-access without any local persistence or caching.  By default the file system connects directly to the postgresql database using `readonly` credentials, however, read-write mode is also implemented.. 
 
 ![working with files and directories on tableaufs](http://cdn.starschema.net/tableaufs.PNG)
 
@@ -45,14 +45,16 @@ TableauFS maps Tableau repository to the following directory structure:
     /Sitename/Projectname/Workbook 2.tbw[x] 
     /Sitename/Projectname/Datasource 1.tds[x] 
 
-Read operations are fully supported while write support is implemented but still highly experimental.
+Read operations are fully supported while write support is implemented but still highly experimental. For rw mode you need read-write access to workbooks, datasources and pg_largeobjects tables.
 Last modification time is read from last\_updated columns while file sizes are actual sizes of the pg\_largeobjects.
 
 ## Questions 
 
 **Is this supported or allowed by Tableau or any 3rd party?**
 
-Tableau FS uses only the supported `readonly` repository user which is supported and allowed by Tableau. For the file system part is completely unsupported, however, we are trying to help you on best effort basis.
+Tableau FS uses the supported `readonly` repository user by default which is supported and allowed by Tableau. The file system part is completely unsupported, however, we are trying to help you on best effort basis.
+
+Accessing your repository in read-write mode is not supported.
 
 **I need this on windows, can I?**
 
