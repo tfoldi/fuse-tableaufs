@@ -33,6 +33,7 @@
 #include "libpq/libpq-fs.h"
 
 #define BUFSIZE          1024
+#define TFS_WG_BLOCKSIZE 8196
 #define _NAME_MAX "255"
 
 #define TFS_WG_MTIME \
@@ -173,11 +174,14 @@ int TFS_WG_stat_file(tfs_wg_node_t * node)
   PGresult * res;
   int ret;
 
+  node->st.st_blksize = TFS_WG_BLOCKSIZE;
+
   // basic stat stuff: file type, nlinks, size of dirs
   if ( node->level < TFS_WG_FILE) {
     node->st.st_mode = S_IFDIR | 0555;   // read only
     node->st.st_nlink = 2;
-    node->st.st_size = 0;
+    node->st.st_size = TFS_WG_BLOCKSIZE;
+    node->st.st_blocks = 1;
   } else if (node->level == TFS_WG_FILE) {
     node->st.st_mode = S_IFREG | 0444;   // read only
     node->st.st_nlink = 1;
@@ -216,8 +220,10 @@ int TFS_WG_stat_file(tfs_wg_node_t * node)
     node->st.st_mtime = atoll( PQgetvalue(res, 0, TFS_WG_QUERY_MTIME) );
 
     if ( node->level == TFS_WG_FILE ) {
-      node->st.st_size = atoll( PQgetvalue(res, 0, TFS_WG_QUERY_SIZE) );
       node->loid = (uint64_t)atoll( PQgetvalue(res, 0, TFS_WG_QUERY_CONTENT) );
+      node->st.st_size = atoll( PQgetvalue(res, 0, TFS_WG_QUERY_SIZE) );
+      if ( node->st.st_size > 0 )
+        node->st.st_blocks = (int) node->st.st_size / TFS_WG_BLOCKSIZE + 1;
     }
 
     ret = 0;
