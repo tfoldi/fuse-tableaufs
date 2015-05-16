@@ -62,6 +62,8 @@
 
 #define TFS_WG_LIST_DATASOURCES TFS_WG_LIST_FILE( datasources, tds )
 
+#define TFS_WG_NAMES_WITHOUT_SLASH(ext) \
+  "replace(c.name,'/','_')||'." #ext "x', replace(c.name,'/','_')||'." #ext "' "
 
 static PGconn *conn;
 static pthread_mutex_t tfs_wg_transaction_block_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -145,6 +147,8 @@ int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
 {
   PGresult *res;
   int i, ret;
+  size_t j, len;
+  char * name; 
   const char *paramValues[2] = { node->site, node->project };
 
   if (node->level == TFS_WG_ROOT) 
@@ -168,8 +172,16 @@ int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
   } else if (PQntuples(res) == 0 ) {
     ret = -ENOENT;
   } else {
-    for (i = 0; i < PQntuples(res); i++)
-      filler(buffer, PQgetvalue(res, i, TFS_WG_QUERY_NAME), NULL, 0);
+    for (i = 0; i < PQntuples(res); i++) {
+      name = PQgetvalue(res, i, TFS_WG_QUERY_NAME);
+      len = strlen( name );
+
+      for ( j = 0 ; j < len ; j++ ) 
+        if ( name[j] == '/' )
+          name[j] = '_';
+
+      filler(buffer, name, NULL, 0);
+    }	
   }
 
   PQclear(res);
@@ -212,9 +224,9 @@ int TFS_WG_stat_file(tfs_wg_node_t * node)
   } else if (node->level == TFS_WG_FILE) {
   
     res = PQexecParams(conn, 
-        TFS_WG_LIST_WORKBOOKS " and $3 IN ( c.name||'.twbx', c.name||'.twb') "
+        TFS_WG_LIST_WORKBOOKS " and $3 IN (" TFS_WG_NAMES_WITHOUT_SLASH(twb) ") "
         "union all " 
-        TFS_WG_LIST_DATASOURCES " and $3 IN ( c.name||'.tdsx', c.name||'.tds') ", 
+        TFS_WG_LIST_DATASOURCES " and $3 IN (" TFS_WG_NAMES_WITHOUT_SLASH(tds) ") ", 
         3, NULL, paramValues, NULL, NULL, 0);   
   }
 
@@ -297,4 +309,4 @@ int TFS_WG_connect_db(const char * pghost, const char * pgport,
 
   return 0;
 }
-
+  
