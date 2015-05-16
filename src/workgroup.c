@@ -28,6 +28,7 @@
 #include <string.h>
 #include <time.h>
 #include <errno.h>
+#include <pthread.h>
 #include "workgroup.h"
 #include "libpq-fe.h"
 #include "libpq/libpq-fs.h"
@@ -63,6 +64,8 @@
 
 
 static PGconn *conn;
+static pthread_mutex_t tfs_wg_transaction_block_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid, char * buf, 
     const size_t size, const off_t offset)
@@ -78,6 +81,10 @@ int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid, char * buf,
 
   // LO operations only supported within transactions
   // On our FS one read is one transaction
+  // While libpq is thread safe, still, we cannot have parallel 
+  // transactions from multiple threads on the same connection
+  pthread_mutex_lock(&tfs_wg_transaction_block_mutex);
+
   res = PQexec(conn, "BEGIN");
   PQclear(res);
 
@@ -114,6 +121,8 @@ int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid, char * buf,
   }
   
   res = PQexec(conn, "END");
+  pthread_mutex_unlock(&tfs_wg_transaction_block_mutex);
+
   PQclear(res);
 
   return ret;
