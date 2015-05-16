@@ -85,13 +85,13 @@ static int tableau_open(const char *path, struct fuse_file_info *fi)
 static int tableau_read(const char *path, char *buf, size_t size, off_t offset,
     struct fuse_file_info *fi)
 {
-  return TFS_WG_IO_operation(TFS_WG_READ, fi->fh, buf, size, offset);
+  return TFS_WG_IO_operation(TFS_WG_READ, fi->fh, NULL, buf, size, offset);
 }
 
 static int tableau_write(const char *path, const char *buf, size_t size, off_t offset,
     struct fuse_file_info *fi)
 {
-  return TFS_WG_IO_operation(TFS_WG_WRITE, fi->fh, (char *) buf, size, offset);
+  return TFS_WG_IO_operation(TFS_WG_WRITE, fi->fh, buf, NULL, size, offset);
 }
 
 static int tableau_truncate(const char *path, off_t offset)
@@ -103,7 +103,7 @@ static int tableau_truncate(const char *path, off_t offset)
   if (node.level != TFS_WG_FILE )
     ret = -EISDIR;
   else
-    ret = TFS_WG_IO_operation(TFS_WG_TRUNCATE, node.loid, NULL, 0, offset);
+    ret = TFS_WG_IO_operation(TFS_WG_TRUNCATE, node.loid, NULL, NULL, 0, offset);
 
   return ret;
 }

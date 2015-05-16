@@ -69,8 +69,8 @@ static PGconn *conn;
 static pthread_mutex_t tfs_wg_transaction_block_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
-int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid, char * buf, 
-    const size_t size, const off_t offset)
+int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid, 
+    const char * src, char * dst, const size_t size, const off_t offset)
 {
   PGresult *res;
   int fd, ret = 0;
@@ -104,10 +104,10 @@ int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid, char * buf,
   } else {
     switch (op) {
       case TFS_WG_READ:
-        ret = lo_read(conn, fd, buf, size);
+        ret = lo_read(conn, fd, dst, size);
         break;
       case TFS_WG_WRITE:
-        ret = lo_write(conn, fd, buf, size);
+        ret = lo_write(conn, fd, src, size);
         break;
       case TFS_WG_TRUNCATE:
 #ifdef HAVE_LO_TRUNCATE64
