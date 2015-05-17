@@ -1,6 +1,9 @@
 # Find PostgreSQL
 # ~~~~~~~~~~~~~~~
 # Copyright (c) 2007, Martin Dobias <wonder.sk at gmail.com>
+#
+# Modified by tfoldi@starschema.net (check for 64 bit lo functions)
+#
 # Redistribution and use is allowed according to the terms of the BSD license.
 # For details see the accompanying COPYING-CMAKE-SCRIPTS file.
 #
@@ -13,6 +16,7 @@
 # and following variables are set:
 #    POSTGRES_INCLUDE_DIR
 #    POSTGRES_LIBRARY
+INCLUDE (CheckLibraryExists)
 
 IF(WIN32)
   IF (NOT POSTGRES_INCLUDE_DIR)
@@ -78,7 +82,21 @@ ENDIF (POSTGRES_INCLUDE_DIR AND POSTGRES_LIBRARY)
 
 
 IF (POSTGRES_FOUND)
+   
+   # Check if we have 64 bit lo functions
+   SET(CMAKE_EXTRA_INCLUDE_FILES "${POSTGRES_INCLUDE_DIR}/libpq-fe.h")
+   CHECK_LIBRARY_EXISTS( ${POSTGRES_LIBRARY} lo_lseek64 "" HAVE_LO_LSEEK64 ) 
+   CHECK_LIBRARY_EXISTS( ${POSTGRES_LIBRARY} lo_truncate64 "" HAVE_LO_TRUNCATE64 ) 
+ 
 
+   IF ( HAVE_LO_LSEEK64 )
+     SET( POSTGRES_CFLAGS " -DHAVE_LO_LSEEK64" )
+   ENDIF ( HAVE_LO_LSEEK64 )
+
+   IF ( HAVE_LO_TRUNCATE64 )
+     SET( POSTGRES_CFLAGS "${POSTGRES_CFLAGS} -DHAVE_LO_TRUNCATE64" )
+   ENDIF ( HAVE_LO_TRUNCATE64 )
+  
    IF (NOT POSTGRES_FIND_QUIETLY)
       MESSAGE(STATUS "Found PostgreSQL: ${POSTGRES_LIBRARY}")
    ENDIF (NOT POSTGRES_FIND_QUIETLY)
