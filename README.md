@@ -1,5 +1,5 @@
 # FUSE-TableauFS: File System on Tableau Repository
-TableauFS is a FUSE based userspace file system driver built on top of Tableau's repository server. It allows to mount tableau servers with its datasources and workbooks directly to the file system. File information and contents are retrieved on-access without any local persistence or caching.  By default the file system connects directly to the postgresql database using `readonly` credentials, however, read-write mode is also implemented.. 
+TableauFS is a FUSE based userspace file system driver built on top of Tableau's repository server. It allows to mount tableau servers with its datasources and workbooks directly to the file system. File information and contents are retrieved on-access without any local persistence or caching.  By default the file system connects directly to the postgresql database using `readonly` credentials, however, read-write mode is also implemented using twlwgadmin user. 
 
 ![working with files and directories on tableaufs](http://cdn.starschema.net/tableaufs.PNG)
 
@@ -13,7 +13,7 @@ TableauFS helps Tableau Server administrators in several cases:
  - Migrate contents between servers
  - Grep strings in workbook definitions
 
-Your Tableau published objects will be visible as ordinary files, thus, the possibilities are unlimited.
+Your Tableau published objects will be visible as ordinary files, thus, the possibilities are unlimited. For more information please visit http://databoss.starschema.net/introducing-tableaufs-file-system-on-tableau-server-repository/ 
 
  
 ## Installation
@@ -24,7 +24,23 @@ At the moment only Linux, FreeBSD and OSX are supported. If you have to use file
 To compile the application you need at `cmake` (=> 2.6), `libpq` (>= 9.0) and `fuse`  (=>2.9).
 
 ### Build
-Just type `cmake && make && make install`and you will have everything installed. 
+Just type `cmake . && make && make install`and you will have everything installed. 
+
+### Configuring tableau server database
+
+To exploit all features (include read-write mode) you need `tblwgadmin` or similar user with superuser privilege while for read only access `readonly` user is almost enough.  
+![Enable and grant select to readonly user](http://databoss.starschema.net/wp-content/uploads/2015/05/enable-and-grant-select-to-readonly-user.png)
+
+The steps here:
+
+ 1. Enable readonly user with `tabadmin dbpass --username readonly <password>`  
+ 2. Check your pgsql admin password in `tabsvc.yml` file. The default location is C:\ProgramData\Tableau\Tableau Server\config but depending on your ProgramData folder, this can be different. lease note that ProgramData folder can be hidden.
+ 3. Go to Tableau Server\9.0\pgsql\bin folder and issue `psql -h localhost -p 8060 -U tblwgadmin workgroup` command and paste the password from `tabsvc.yml`
+ 4. Execute the `grant select on pg_largeobject to readonly; `statement
+
+to leverage the full read only experience. It will not harm your system (this is still read only) but unsupported.
+
+
 
 ## Usage
 To mount a tableau server type:
@@ -58,11 +74,11 @@ Accessing your repository in read-write mode is not supported.
 
 **I need this on windows, can I?**
 
-You should ramp up a unix server, install a webdav server on it (like apache+mod_dav) and mount it. Native windows driver is also on my backlog without any ETA.
+You should ramp up a unix server, install a webdav server on it (like apache+mod_dav) and mount it. The Docker image with webdav + tableaufs is here: https://registry.hub.docker.com/u/tfoldi/fuse-tableaufs/
 
 **Do you have a binary installer?**
 
-No, but if you need I can send you a `Dockerfile` if that helps. 
+No, but you can find a Dockerfile in docker folder, that should help.
 
 **Can I move my files to a version control repo?**
 
@@ -74,7 +90,6 @@ Add `--privileged` to your  `docker exec` command line.
 
 ## Issues / Known bugs
 
- - Objects with `/`  in their file names are not supported.
 
 Please send a pull request or open an issue if you have any problems.
 
