@@ -391,7 +391,6 @@ int TFS_WG_parse_path(const char * path, tfs_wg_node_t * node)
 int TFS_WG_connect_db(const char * pghost, const char * pgport,
     const char * login, const char * pwd)
 {
-
   // save the connection data to the global (eeeeek) state.
   struct tableau_cmdargs conn_data = {(char*)pghost, (char*)pgport, (char*)login, (char*)pwd};
   pg_connection_data = conn_data;
@@ -402,24 +401,5 @@ int TFS_WG_connect_db(const char * pghost, const char * pgport,
   // return based on whether we have the connection
   if (global_conn == NULL) return -1;
   return 0;
-
-#ifdef HELL_FREEZES_OVER
-  /*
-   * set up the connection
-   */
-  global_conn = PQsetdbLogin(pghost, pgport, NULL, NULL, "workgroup", login, pwd );
-
-  /* check to see that the backend connection was successfully made */
-  if (PQstatus(conn) == CONNECTION_BAD)
-  {
-    fprintf(stderr, "Connection to database '%s' failed.\n", pghost);
-    fprintf(stderr, "%s", PQerrorMessage(conn));
-    PQfinish(conn);
-    return -1;
-  }
-
-  return 0;
-#endif
-
 }
 
