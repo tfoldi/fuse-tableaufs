@@ -21,7 +21,12 @@
    THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    */
 
-#define FUSE_USE_VERSION 30
+
+// fuse.h recommends setting the API version to 26 for new applications
+#define FUSE_USE_VERSION 26
+
+#include "tableaufs.h"
+
 #include <fuse.h>
 #include <stdio.h>
 #include <stddef.h>
@@ -30,13 +35,14 @@
 #include <fcntl.h>
 #include "workgroup.h"
 
+
 #define TFS_WG_PARSE_PATH( path, node ) \
 { \
   int __ret = TFS_WG_parse_path(path, node);\
   if (__ret < 0){  \
     return __ret; \
   }; \
-} while (0)  
+} while (0)
 
 static int tableau_getattr(const char *path, struct stat *stbuf)
 {
@@ -46,7 +52,7 @@ static int tableau_getattr(const char *path, struct stat *stbuf)
   TFS_WG_PARSE_PATH(path, &node);
 
   memcpy(stbuf, &(node.st), sizeof(struct stat));
-  
+
   return res;
 }
 
@@ -69,7 +75,7 @@ static int tableau_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 }
 
 static int tableau_open(const char *path, struct fuse_file_info *fi)
-{  
+{
   tfs_wg_node_t node;
   int ret;
 
@@ -108,6 +114,7 @@ static int tableau_truncate(const char *path, off_t offset)
   return ret;
 }
 
+// A descriptor for all the possible FUSE operations on a tableau endpoint
 static struct fuse_operations tableau_oper = {
   .getattr        = tableau_getattr,
   .readdir        = tableau_readdir,
@@ -117,30 +124,42 @@ static struct fuse_operations tableau_oper = {
   .truncate       = tableau_truncate,
 };
 
-struct tableau_cmdargs { 
-  char *pghost; 
-  char *pgport; 
-  char *pguser; 
-  char *pgpass; 
-};
+
+// A shortcut macro for easy-peasy parameter description
+#define TABLEAUFS_OPT(t, p) { t, offsetof(struct tableau_cmdargs, p), 1 }
+
 
 static struct tableau_cmdargs tableau_cmdargs;
 static struct fuse_opt tableaufs_opts[] =
 {
-    { "pghost=%s", offsetof(struct tableau_cmdargs, pghost), 0 },
-    { "pgport=%s", offsetof(struct tableau_cmdargs, pgport), 0 },
-    { "pguser=%s", offsetof(struct tableau_cmdargs, pguser), 0 },
-    { "pgpass=%s", offsetof(struct tableau_cmdargs, pgpass), 0 }
+  TABLEAUFS_OPT("pghost=%s", pghost),
+  TABLEAUFS_OPT("pgport=%s", pgport),
+  TABLEAUFS_OPT("pguser=%s", pguser),
+  TABLEAUFS_OPT("pgpass=%s", pgpass),
+
+  // No more options for you Sir
+  FUSE_OPT_END
 };
+
+
+// Just some verbose information.
+static void print_verbose_information(int argc, char *argv[])
+{
+  printf("TableauFS v%s using FUSE API Version %d\n", TABLEAUFS_VERSION, fuse_version());
+}
+
 
 int main(int argc, char *argv[])
 {
-  struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
+  // print some information
+  print_verbose_information(argc, argv);
 
-  if (fuse_opt_parse(&args, &tableau_cmdargs, tableaufs_opts, 0) == -1)
+  // Parse the command line
+  struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
+  if (fuse_opt_parse(&args, &tableau_cmdargs, tableaufs_opts, NULL) == -1)
     return -1;
 
-
+  // Validate the options
   if (tableau_cmdargs.pguser == NULL ||
       tableau_cmdargs.pghost == NULL ||
       tableau_cmdargs.pgport == NULL ||
@@ -150,11 +169,13 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-  printf("Connecting to %s@%s:%s\n", tableau_cmdargs.pguser, 
+  // Connect to PG
+  printf("Connecting to %s@%s:%s\n", tableau_cmdargs.pguser,
       tableau_cmdargs.pghost, tableau_cmdargs.pgport );
 
   TFS_WG_connect_db( tableau_cmdargs.pghost, tableau_cmdargs.pgport,
       tableau_cmdargs.pguser, tableau_cmdargs.pgpass);
 
+  // Do the FUSE dance
   return fuse_main(args.argc, args.argv, &tableau_oper, NULL);
 }

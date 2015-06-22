@@ -38,7 +38,7 @@
 #define _NAME_MAX "255"
 
 #define TFS_WG_MTIME \
-  ", extract(epoch from coalesce(c.updated_at,'2000-01-01')) ctime " 
+  ", extract(epoch from coalesce(c.updated_at,'2000-01-01')) ctime "
 
 #define TFS_WG_LIST_SITES  \
   "select c.name" TFS_WG_MTIME "from sites c where 1 = 1 "
@@ -69,7 +69,7 @@ static PGconn *conn;
 static pthread_mutex_t tfs_wg_transaction_block_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
-int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid, 
+int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid,
     const char * src, char * dst, const size_t size, const off_t offset)
 {
   PGresult *res;
@@ -83,7 +83,7 @@ int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid,
 
   // LO operations only supported within transactions
   // On our FS one read is one transaction
-  // While libpq is thread safe, still, we cannot have parallel 
+  // While libpq is thread safe, still, we cannot have parallel
   // transactions from multiple threads on the same connection
   pthread_mutex_lock(&tfs_wg_transaction_block_mutex);
 
@@ -92,7 +92,7 @@ int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid,
 
   fd = lo_open(conn, (Oid)loid, mode);
 
-  fprintf(stderr, "TFS_WG_open: reading from fd %d (l:%lu:o:%lu)\n",
+  fprintf(stderr, "TFS_WG_open: reading from fd %d (l:%lu:o:%tu)\n",
       fd, size, offset);
 
 #ifdef HAVE_LO_LSEEK64
@@ -121,7 +121,7 @@ int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid,
         break;
     }
   }
-  
+
   res = PQexec(conn, "END");
   pthread_mutex_unlock(&tfs_wg_transaction_block_mutex);
 
@@ -136,7 +136,7 @@ int TFS_WG_open(const tfs_wg_node_t * node, int mode, uint64_t * fh)
 
   if (node->level != TFS_WG_FILE )
     return -EISDIR;
-  else 
+  else
     *fh = node->loid;
 
   return 0;
@@ -148,21 +148,33 @@ int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
   PGresult *res;
   int i, ret;
   size_t j, len;
-  char * name; 
+  char * name;
   const char *paramValues[2] = { node->site, node->project };
 
-  if (node->level == TFS_WG_ROOT) 
+  switch(node->level)
   {
-    res = PQexec(conn, TFS_WG_LIST_SITES);
-  } else if (node->level ==  TFS_WG_SITE ) {
-    res = PQexecParams(conn, TFS_WG_LIST_PROJECTS, 1, NULL, paramValues,
-        NULL, NULL, 0);   
-  } else if (node->level == TFS_WG_PROJECT) {
-    res = PQexecParams(conn, 
-        TFS_WG_LIST_WORKBOOKS " union all " TFS_WG_LIST_DATASOURCES, 
-        2, NULL, paramValues, NULL, NULL, 0);   
-  }
+    case TFS_WG_ROOT:
+      res = PQexec(conn, TFS_WG_LIST_SITES);
+      break;
 
+    case TFS_WG_SITE:
+      res = PQexecParams(conn, TFS_WG_LIST_PROJECTS, 1, NULL, paramValues, NULL, NULL, 0);
+      break;
+
+
+    case TFS_WG_PROJECT:
+      res = PQexecParams(conn,
+          TFS_WG_LIST_WORKBOOKS " union all " TFS_WG_LIST_DATASOURCES,
+          2, NULL, paramValues, NULL, NULL, 0);
+      break;
+
+    default:
+      // make sure res is initialized, so the code is clean and we dont get a warning
+      res = NULL;
+      fprintf(stderr, "Unknown node level found: %u\n", node->level);
+      break;
+
+  }
 
   if (PQresultStatus(res) != PGRES_TUPLES_OK)
   {
@@ -172,16 +184,18 @@ int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
   } else if (PQntuples(res) == 0 ) {
     ret = -ENOENT;
   } else {
+    // return a zero as the universal OK sign
+    ret = 0;
     for (i = 0; i < PQntuples(res); i++) {
       name = PQgetvalue(res, i, TFS_WG_QUERY_NAME);
       len = strlen( name );
 
-      for ( j = 0 ; j < len ; j++ ) 
+      for ( j = 0 ; j < len ; j++ )
         if ( name[j] == '/' )
           name[j] = '_';
 
       filler(buffer, name, NULL, 0);
-    }	
+    }
   }
 
   PQclear(res);
@@ -212,27 +226,30 @@ int TFS_WG_stat_file(tfs_wg_node_t * node)
     time(&(node->st.st_mtime));
     return 0;
   } else if (node->level == TFS_WG_SITE) {
-    
-    res = PQexecParams(conn, TFS_WG_LIST_SITES " and c.name = $1", 1, NULL, 
+
+    res = PQexecParams(conn, TFS_WG_LIST_SITES " and c.name = $1", 1, NULL,
         paramValues, NULL, NULL, 0);
 
   } else if (node->level ==  TFS_WG_PROJECT) {
 
     res = PQexecParams(conn, TFS_WG_LIST_PROJECTS " and c.name = $2",
-        2, NULL, paramValues, NULL, NULL, 0);   
-  
+        2, NULL, paramValues, NULL, NULL, 0);
+
   } else if (node->level == TFS_WG_FILE) {
-  
-    res = PQexecParams(conn, 
+
+    res = PQexecParams(conn,
         TFS_WG_LIST_WORKBOOKS " and $3 IN (" TFS_WG_NAMES_WITHOUT_SLASH(twb) ") "
-        "union all " 
-        TFS_WG_LIST_DATASOURCES " and $3 IN (" TFS_WG_NAMES_WITHOUT_SLASH(tds) ") ", 
-        3, NULL, paramValues, NULL, NULL, 0);   
+        "union all "
+        TFS_WG_LIST_DATASOURCES " and $3 IN (" TFS_WG_NAMES_WITHOUT_SLASH(tds) ") ",
+        3, NULL, paramValues, NULL, NULL, 0);
+  } else {
+    // res defaults to NULL
+    res = NULL;
   }
 
   if (PQresultStatus(res) != PGRES_TUPLES_OK)
   {
-    fprintf(stderr, "SELECT entries failed: %s", PQerrorMessage(conn));
+    fprintf(stderr, "SELECT entries failed: %s/%s", PQresultErrorMessage(res), PQerrorMessage(conn));
     // TODO: error handling
     ret = -EINVAL;
   } else if (PQntuples(res) == 0 ) {
@@ -280,8 +297,9 @@ int TFS_WG_parse_path(const char * path, tfs_wg_node_t * node)
     fprintf(stderr, "TFS_WG_parse_path: site: %s proj: %s file: %s\n",
         node->site, node->project, node->file);
 
-    node->level = ret;
-    
+    // cast so the signed conversion warning goes away
+    node->level = (tfs_wg_level_t)ret;
+
     // get stat from node
     ret = TFS_WG_stat_file(node);
 
@@ -305,8 +323,8 @@ int TFS_WG_connect_db(const char * pghost, const char * pgport,
     fprintf(stderr, "%s", PQerrorMessage(conn));
     PQfinish(conn);
     return -1;
-  } 
+  }
 
   return 0;
 }
-  
+
