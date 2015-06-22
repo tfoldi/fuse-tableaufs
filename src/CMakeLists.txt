@@ -30,7 +30,10 @@ LINK_LIBRARIES( ${POSTGRES_LIBRARY} ${FUSE_LDFLAGS} )
 INCLUDE_DIRECTORIES( ${POSTGRES_INCLUDE_DIR} ${FUSE_INCLUDE_DIRS} )
 
 
-set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FUSE_CFLAGS_OTHER} ${POSTGRES_CFLAGS}" )
+# FUSE_CFLAGS_OTHER may contain more then one option so we replace
+# the bad joining semicolons
+string(REPLACE ";" " " FUSE_CFLAGS_OTHER_SPLIT ${FUSE_CFLAGS_OTHER})
+set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FUSE_CFLAGS_OTHER_SPLIT} ${POSTGRES_CFLAGS}" )
 
 ADD_EXECUTABLE(  tableaufs
                  tableaufs.c workgroup.c workgroup.h

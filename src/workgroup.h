@@ -26,8 +26,9 @@
 #include <stdint.h>
 #include <limits.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 
-typedef enum 
+typedef enum
 {
   TFS_WG_READ = 0,
   TFS_WG_WRITE = 1,
@@ -58,13 +59,13 @@ typedef enum {
   TFS_WG_QUERY_SIZE = 3
 } tfs_wg_list_query_cols_t;
 
-typedef int(* tfs_wg_add_dir_t )(void *buf, const char *name, 
+typedef int(* tfs_wg_add_dir_t )(void *buf, const char *name,
     const struct stat *stbuf, off_t off);
 
-extern int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid, 
+extern int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid,
     const char * src, char * dst, const size_t size, const off_t offset);
 
-extern int TFS_WG_modife(const uint64_t fd, char * buf, const size_t size, 
+extern int TFS_WG_modife(const uint64_t fd, char * buf, const size_t size,
     const off_t offset, tfs_wg_operations_t op);
 
 extern int TFS_WG_open(const tfs_wg_node_t * node, int mode, uint64_t * fh);
