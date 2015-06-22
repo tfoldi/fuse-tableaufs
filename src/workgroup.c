@@ -30,6 +30,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include "workgroup.h"
+#include "tableaufs.h"
 #include "libpq-fe.h"
 #include "libpq/libpq-fs.h"
 
@@ -65,8 +66,77 @@
 #define TFS_WG_NAMES_WITHOUT_SLASH(ext) \
   "replace(c.name,'/','_')||'." #ext "x', replace(c.name,'/','_')||'." #ext "' "
 
-static PGconn *conn;
+
+/** The global connection object */
+static PGconn* global_conn;
+
+/** Mutex for transaction LO access */
 static pthread_mutex_t tfs_wg_transaction_block_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+
+
+/**
+ * Connection data for postgres.
+ *
+ * This gets filled on the call to TFS_WG_connect_db.
+ */
+static struct tableau_cmdargs pg_connection_data;
+
+/** Helper function to wrap connecting to a database using the connection data */
+static PGconn* connect_to_pg( struct tableau_cmdargs conn_data)
+{
+  PGconn* new_conn = PQsetdbLogin(
+      conn_data.pghost,
+      conn_data.pgport,
+      NULL, NULL, "workgroup",
+      conn_data.pguser,
+      conn_data.pgpass );
+
+  /* check to see that the backend connection was successfully made */
+  if (PQstatus(new_conn) == CONNECTION_BAD)
+  {
+    fprintf(stderr, "Connection to database '%s' failed.\n", conn_data.pghost);
+    fprintf(stderr, "%s", PQerrorMessage(new_conn));
+    PQfinish(new_conn);
+    return NULL;
+  }
+
+  return new_conn;
+}
+
+/**
+ * Helper function to get the current connection to the database
+ *
+ * TODO: should this reconnect be wrapped in a mutex?
+ */
+static PGconn* get_pg_connection()
+{
+  // List all cases, figure out which need reconnection
+  switch( PQstatus(global_conn) )
+  {
+    case CONNECTION_BAD:
+      fprintf(stderr, "CONNECTION_BAD encountered: '%s'. Trying to reconnect.\n", PQerrorMessage(global_conn));
+      // overwrite the existing global (EEEEEK) connection
+      global_conn = connect_to_pg( pg_connection_data );
+      return global_conn;
+
+
+    case CONNECTION_NEEDED:
+      // Postgres 9 Docs is silent about this enum value. What does this state mean?
+      // TODO: is it safe to return conn here?
+      return global_conn;
+
+
+    case CONNECTION_SETENV:
+    case CONNECTION_AUTH_OK:
+    case CONNECTION_SSL_STARTUP:
+    case CONNECTION_MADE:
+    case CONNECTION_AWAITING_RESPONSE:
+    case CONNECTION_STARTED:
+    case CONNECTION_OK:
+      return global_conn;
+  }
+}
 
 
 int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid,
@@ -75,6 +145,10 @@ int TFS_WG_IO_operation(tfs_wg_operations_t op, const uint64_t loid,
   PGresult *res;
   int fd, ret = 0;
   int mode;
+
+  // get the connection via a reconnect-capable backer
+  PGconn* conn = get_pg_connection();
+
 
   if ( op == TFS_WG_READ )
     mode = INV_READ;
@@ -151,6 +225,10 @@ int TFS_WG_readdir(const tfs_wg_node_t * node, void * buffer,
   char * name;
   const char *paramValues[2] = { node->site, node->project };
 
+  // get the connection via a reconnect-capable backer
+  PGconn* conn = get_pg_connection();
+
+
   switch(node->level)
   {
     case TFS_WG_ROOT:
@@ -208,6 +286,9 @@ int TFS_WG_stat_file(tfs_wg_node_t * node)
   const char *paramValues[3] = { node->site, node->project, node->file };
   PGresult * res;
   int ret;
+
+  // get the connection via a reconnect-capable backer
+  PGconn* conn = get_pg_connection();
 
   node->st.st_blksize = TFS_WG_BLOCKSIZE;
 
@@ -310,21 +391,15 @@ int TFS_WG_parse_path(const char * path, tfs_wg_node_t * node)
 int TFS_WG_connect_db(const char * pghost, const char * pgport,
     const char * login, const char * pwd)
 {
+  // save the connection data to the global (eeeeek) state.
+  struct tableau_cmdargs conn_data = {(char*)pghost, (char*)pgport, (char*)login, (char*)pwd};
+  pg_connection_data = conn_data;
 
-  /*
-   * set up the connection
-   */
-  conn = PQsetdbLogin(pghost, pgport, NULL, NULL, "workgroup", login, pwd );
+  // Set up the connection
+  global_conn = connect_to_pg( conn_data );
 
-  /* check to see that the backend connection was successfully made */
-  if (PQstatus(conn) == CONNECTION_BAD)
-  {
-    fprintf(stderr, "Connection to database '%s' failed.\n", pghost);
-    fprintf(stderr, "%s", PQerrorMessage(conn));
-    PQfinish(conn);
-    return -1;
-  }
-
+  // return based on whether we have the connection
+  if (global_conn == NULL) return -1;
   return 0;
 }
 
