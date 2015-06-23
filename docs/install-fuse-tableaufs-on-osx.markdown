@@ -51,15 +51,6 @@ Installing CMake is fairly straightforward
 brew install cmake
 ```
 
-#### libpq
-
-If you dont already have postgresql installed, the easiest way to
-install the headers necessary is to install postgres using brew:
-
-```
-$ brew install postgresql
-```
-
 After installation check if you're successful:
 
 ```
@@ -67,6 +58,15 @@ $ cmake --version
 cmake version 3.0.2
 
 CMake suite maintained and supported by Kitware (kitware.com/cmake).
+```
+
+#### libpq
+
+If you dont already have postgresql installed, the easiest way to
+install the headers necessary is to install postgres using brew:
+
+```
+$ brew install postgresql
 ```
 
 #### FUSE
