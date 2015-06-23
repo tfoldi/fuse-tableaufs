@@ -35,31 +35,39 @@ a wrapper for CLang handling the GCC command line switches properly.
 
 After installation check if you're successful:
 
-`$ clang --version
+```
+$ clang --version
 Apple LLVM version 6.0 (clang-600.0.51) (based on LLVM 3.5svn)
 Target: x86_64-apple-darwin13.4.0
-Thread model: posix`
+Thread model: posix
+```
 
 
 #### CMake
 
 Installing CMake is fairly straightforward
 
-`brew install cmake`
+```
+brew install cmake
+```
 
 #### libpq
 
 If you dont already have postgresql installed, the easiest way to
 install the headers necessary is to install postgres using brew:
 
-`$ brew install postgresql`
+```
+$ brew install postgresql
+```
 
 After installation check if you're successful:
 
-`$ cmake --version
+```
+$ cmake --version
 cmake version 3.0.2
 
-CMake suite maintained and supported by Kitware (kitware.com/cmake).`
+CMake suite maintained and supported by Kitware (kitware.com/cmake).
+```
 
 #### FUSE
 
@@ -82,15 +90,18 @@ cloning the source repository instead of downloading a source archive.
 Then create a separate directory for building it (out-of-source builds
 are the recommended way of working with CMake):
 
-`
+```
 $ mkdir fuse-tableaufs-build
-$ cd fuse-tableaufs-build`
+$ cd fuse-tableaufs-build
+```
 
 Then use cmake to generate the makefiles (replace `../fuse-tableaufs` with the relative
 path of the source folder from the build folder):
 
-`$ cmake . ../fuse-tableaufs
- $ make clean tableaufs`
+```
+$ cmake . ../fuse-tableaufs
+$ make clean tableaufs
+```
 
 After a short compilation, the tableaufs executable is available in the
 src folder.
