@@ -74,7 +74,12 @@ $ brew install postgresql
 [FUSE for OSX](http://osxfuse.github.io) is a separate project from
 FUSE. You can download the latest release from the
 [osxfuse sourceforge files](http://sourceforge.net/projects/osxfuse/files/)
-or the [osxfuse github releases page](https://github.com/osxfuse/osxfuse/releases).
+or the [osxfuse github releases page](https://github.com/osxfuse/osxfuse/releases)
+or install it using HomeBrew:
+
+```
+$ brew install osxfuse
+```
 
 We recommend installing a recent version (we have tested using 3.0.3
 released on 15. May 2015).
