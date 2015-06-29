@@ -1,4 +1,4 @@
-# Copyright (c) 2012, Tamas Foldi, Starschema ltd
+# Copyright (c) 2012-2015, Tamas Foldi, Starschema
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -21,25 +21,29 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# SET(CMAKE_VERBOSE_MAKEFILE ON)
-
-# -- src --
-
-LINK_LIBRARIES( ${POSTGRES_LIBRARY} ${FUSE_LDFLAGS} )
-
-INCLUDE_DIRECTORIES( ${POSTGRES_INCLUDE_DIR} ${FUSE_INCLUDE_DIRS} )
-
 
 # FUSE_CFLAGS_OTHER may contain more then one option so we replace
 # the bad joining semicolons
 string(REPLACE ";" " " FUSE_CFLAGS_OTHER_SPLIT ${FUSE_CFLAGS_OTHER})
-set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FUSE_CFLAGS_OTHER_SPLIT} ${POSTGRES_CFLAGS}" )
+message(">> Setting FUSE_CFLAGS_OTHER to ${FUSE_CFLAGS_OTHER_SPLIT}")
+set( TFS_COMPILE_FLAGS  "${FUSE_CFLAGS_OTHER_SPLIT} ${POSTGRES_CFLAGS}")
 
-ADD_EXECUTABLE(  tableaufs
-                 tableaufs.c workgroup.c workgroup.h
-                 )
+# Add the executable
+add_executable( tableaufs
+  tableaufs.c
+  workgroup.c
+  )
 
-INSTALL(
+# Set the compile flags on a pre-target basis
+set_target_properties(tableaufs PROPERTIES COMPILE_FLAGS ${TFS_COMPILE_FLAGS})
+
+# Link it with all the good stuff
+target_link_libraries( tableaufs
+  ${POSTGRES_LIBRARY}
+  ${FUSE_LDFLAGS}
+  )
+
+install(
   TARGETS tableaufs
   RUNTIME
   DESTINATION bin )
@@ -58,6 +62,4 @@ if(APPLE)
     COMMAND ln -sf ${TFS_EXEC_INSTALL_PATH} ${TFS_MOUNT_EXEC_INSTALL_PATH}
     )
   ")
-elseif(UNIX)
-  # Nada
 endif()
