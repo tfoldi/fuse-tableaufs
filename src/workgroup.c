@@ -134,6 +134,7 @@ static PGconn* get_pg_connection()
     case CONNECTION_AWAITING_RESPONSE:
     case CONNECTION_STARTED:
     case CONNECTION_OK:
+    default:
       return global_conn;
   }
 }
@@ -392,7 +393,8 @@ int TFS_WG_connect_db(const char * pghost, const char * pgport,
     const char * login, const char * pwd)
 {
   // save the connection data to the global (eeeeek) state.
-  struct tableau_cmdargs conn_data = {(char*)pghost, (char*)pgport, (char*)login, (char*)pwd};
+  struct tableau_cmdargs conn_data = {pghost, pgport, login, pwd};
+  /*struct tableau_cmdargs conn_data = {(char*)pghost, (char*)pgport, (char*)login, (char*)pwd};*/
   pg_connection_data = conn_data;
 
   // Set up the connection
