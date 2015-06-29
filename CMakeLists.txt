@@ -1,4 +1,4 @@
-# Copyright (c) 2012, Tamas Foldi, Starschema
+# Copyright (c) 2012-2015, Tamas Foldi, Starschema
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -21,20 +21,31 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
-PROJECT(fuse-tableaufs C)
-#ENABLE_TESTING()
+cmake_minimum_required(VERSION 2.6)
+project(fuse-tableaufs C)
 
-# SET(CMAKE_VERBOSE_MAKEFILE ON)
-SET(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
-INCLUDE(DefaultCompilerFlags)
-INCLUDE(FindPkgConfig)
 
-FIND_PACKAGE(Postgres) 
-pkg_check_modules( FUSE REQUIRED fuse)
+set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+include(DefaultCompilerFlags)
+include(FindPkgConfig)
 
-SUBDIRS(
-         src
-       )
+# Try to find Postgres
+find_package(Postgres 9.0 REQUIRED)
 
-# -- EOF --
+# Load FUSE
+pkg_check_modules( FUSE REQUIRED fuse>=2.9.0)
+
+# Add the include directories
+include_directories(
+  ${POSTGRES_INCLUDE_DIR}
+  ${FUSE_INCLUDE_DIRS} )
+
+
+# SUBDIRS(...) is deprecated
+#
+# ADD_SUBDIRECTORY processes the subdir at the time it is called,
+# whereas SUBDIRS pushes the dirs onto a list which is processed
+# at the end of the current cmakelists file - this is the old
+# behaviour and some vars are initialized 'out of order'  -or at
+# least in unexpected order
+add_subdirectory(src)

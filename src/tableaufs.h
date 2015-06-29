@@ -26,10 +26,10 @@
 
 /** A structure with the Postgres connection parameters */
 struct tableau_cmdargs {
-  char *pghost;
-  char *pgport;
-  char *pguser;
-  char *pgpass;
+  const char *pghost;
+  const char *pgport;
+  const char *pguser;
+  const char *pgpass;
 };
 
 
