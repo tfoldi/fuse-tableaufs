@@ -24,7 +24,7 @@
 
 # FUSE_CFLAGS_OTHER may contain more then one option so we replace
 # the bad joining semicolons
-string(REPLACE ";" " " FUSE_CFLAGS_OTHER_SPLIT ${FUSE_CFLAGS_OTHER})
+string(REPLACE ";" " " FUSE_CFLAGS_OTHER_SPLIT "${FUSE_CFLAGS_OTHER}")
 message(">> Setting FUSE_CFLAGS_OTHER to ${FUSE_CFLAGS_OTHER_SPLIT}")
 set( TFS_COMPILE_FLAGS  "${FUSE_CFLAGS_OTHER_SPLIT} ${POSTGRES_CFLAGS}")
 
