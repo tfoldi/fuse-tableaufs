@@ -1,4 +1,5 @@
-# FUSE-TableauFS: File System on Tableau Repository
+# FUSE-TableauFS: File System on Tableau Repository [![Build Status](https://travis-ci.org/tfoldi/fuse-tableaufs.svg?branch=master)](https://travis-ci.org/tfoldi/fuse-tableaufs)
+
 TableauFS is a FUSE based userspace file system driver built on top of Tableau's repository server. It allows to mount tableau servers with its datasources and workbooks directly to the file system. File information and contents are retrieved on-access without any local persistence or caching.  By default the file system connects directly to the postgresql database using `readonly` credentials, however, read-write mode is also implemented using twlwgadmin user. 
 
 ![working with files and directories on tableaufs](http://cdn.starschema.net/tableaufs.PNG)
@@ -7,8 +8,8 @@ TableauFS is a FUSE based userspace file system driver built on top of Tableau's
 TableauFS helps Tableau Server administrators in several cases:
 
  - Save/copy workbooks or data sources to other, persistent file systems
- - Run workbook audit tools like [Workbook Audit Tool](http://community.tableau.com/thread/118450) or  [TWIS](http://www.betterbi.biz/TWIS.html)
- - Version control objects with any file based version control system (git, git-annex, subversion, mercurial, p4, etc.)
+ - Run workbook audit tools like [Workbook Audit Tool](http://databoss.starschema.net/how-to-use-twb-auditor-with-tableaufs-audit-tableau-server-files-directly/) or  [TWIS](http://www.betterbi.biz/TWIS.html)
+ - [Version control objects with any file based version control system (git, git-annex, subversion, mercurial, p4, etc.)](http://databoss.starschema.net/version-control-and-point-in-time-recovery-of-tableau-server-objects/)
  - Directly modify files in the repository without using any API
  - Migrate contents between servers
  - Grep strings in workbook definitions
