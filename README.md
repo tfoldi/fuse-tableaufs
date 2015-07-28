@@ -83,7 +83,7 @@ No, but you can find a Dockerfile in docker folder, that should help.
 
 **Can I move my files to a version control repo?**
 
-Sure you can, őhere is how.](http://databoss.starschema.net/version-control-and-point-in-time-recovery-of-tableau-server-objects/)
+Sure you can, [here is how.](http://databoss.starschema.net/version-control-and-point-in-time-recovery-of-tableau-server-objects/)
 
 **I have strange error regarding fuse device when I execute TableauFS from docker**
 
