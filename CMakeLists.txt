@@ -33,7 +33,7 @@ include(FindPkgConfig)
 find_package(Postgres 9.0 REQUIRED)
 
 # Load FUSE
-pkg_check_modules( FUSE REQUIRED fuse>=2.8.0)
+pkg_check_modules( FUSE REQUIRED fuse>=2.7.0)
 
 # Add the include directories
 include_directories(
