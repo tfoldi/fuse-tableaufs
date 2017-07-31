@@ -53,7 +53,7 @@
   "'PK' then 'x' else '' end filename " TFS_WG_MTIME ", content," \
   "(select sum(length(data)) from pg_largeobject where pg_largeobject.loid = " \
   "repository_data.content) size from " #entity " c inner join repository_data " \
-  " on (repository_data.id = coalesce(repository_data_id,repository_extract_data_id))" \
+  " on (repository_data.tracking_id = coalesce(data_id,reduced_data_id))" \
   "inner join projects on (c.project_id = projects.id) inner join sites on " \
   "(sites.id = projects.site_id) inner join pg_largeobject on " \
   "(repository_data.content = pg_largeobject.loid) where pg_largeobject.pageno = 0" \
