@@ -6,7 +6,7 @@ compiler:
   
 before_install:
   - if [ $TRAVIS_OS_NAME == linux ]; then sudo apt-get update && sudo apt-get install -y libpq-dev libfuse-dev fuse-utils libfuse2 ; fi
-  - if [ $TRAVIS_OS_NAME == osx ]; then sudo brew install caskroom/cask/osxfuse ; fi
+  - if [ $TRAVIS_OS_NAME == osx ]; then brew tap caskroom/cask; brew cask install osxfuse; sudo /bin/cp -RfX /usr/local/opt/osxfuse/Library/Filesystems/osxfusefs.fs /Library/Filesystems; sudo chmod +s /Library/Filesystems/osxfusefs.fs/Support/load_osxfusefs; sudo mknod /dev/fuse c 10 229; sudo chmod 666 /dev/fuse; fi
 
 script: cmake . && make 
 
